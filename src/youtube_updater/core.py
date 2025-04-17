@@ -1,13 +1,12 @@
 import os
 import sys
 import pickle
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 import urllib3
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -22,22 +21,16 @@ class YouTubeUpdaterCore:
     """
     
     # Constants
-    DEFAULT_CONFIG_DIR = os.path.join(
-        os.path.expanduser("~"),
-        "Library/Application Support/yt_title_updater" if sys.platform == "darwin"
-        else "AppData/Roaming/yt_title_updater" if sys.platform == "win32"
-        else ".config/yt_title_updater"
-    )
+    DEFAULT_CONFIG_DIR = "yt_title_updater"
     DEFAULT_TITLE = "Live Stream"
     STATUS_TYPES = ("info", "success", "error", "warning")
     
-    def __init__(self, config_dir: Optional[str | Path] = None) -> None:
+    def __init__(self, config_dir: Optional[str] = None) -> None:
         """Initialize the YouTube updater core.
         
         Args:
             config_dir: Directory for configuration files.
-                       Can be a string path or Path object.
-                       Defaults to platform-specific config directory.
+                       Defaults to platform-specific config directory
         """
         self.config_dir = self._setup_config_dir(config_dir)
         self._setup_file_paths()
@@ -55,7 +48,20 @@ class YouTubeUpdaterCore:
         self.setup_youtube()
         self.load_titles()
     
-    def _setup_config_dir(self, config_dir: Optional[str | Path]) -> str:
+    def _get_platform_config_dir(self) -> str:
+        """Get the platform-specific configuration directory.
+        
+        Returns:
+            str: Path to the configuration directory
+        """
+        if sys.platform == "win32":
+            return os.path.join(os.getenv("APPDATA"), self.DEFAULT_CONFIG_DIR)
+        elif sys.platform == "darwin":
+            return os.path.join(os.path.expanduser("~"), "Library", "Application Support", self.DEFAULT_CONFIG_DIR)
+        else:
+            return os.path.join(os.path.expanduser("~"), ".config", self.DEFAULT_CONFIG_DIR)
+    
+    def _setup_config_dir(self, config_dir: Optional[str]) -> str:
         """Set up the configuration directory.
         
         Args:
@@ -65,9 +71,7 @@ class YouTubeUpdaterCore:
             str: Path to the configuration directory
         """
         if config_dir is None:
-            config_dir = os.path.expanduser(self.DEFAULT_CONFIG_DIR)
-        elif isinstance(config_dir, Path):
-            config_dir = str(config_dir)
+            config_dir = self._get_platform_config_dir()
         os.makedirs(config_dir, exist_ok=True)
         return config_dir
     
@@ -79,21 +83,11 @@ class YouTubeUpdaterCore:
         self.client_secrets_path = os.path.join(self.config_dir, "client_secrets.json")
         self.history_log = os.path.join(self.config_dir, "history.log")
         
-        # Create empty files if they don't exist
-        for file_path in [self.titles_file, self.applied_titles_file, self.history_log]:
+        # Ensure required files exist
+        for file_path in [self.applied_titles_file, self.history_log]:
             if not os.path.exists(file_path):
                 with open(file_path, "w") as f:
                     f.write("")
-        
-        # Create empty token.pickle if it doesn't exist
-        if not os.path.exists(self.token_path):
-            with open(self.token_path, "wb") as f:
-                f.write(b"")
-        
-        # Create empty client_secrets.json if it doesn't exist
-        if not os.path.exists(self.client_secrets_path):
-            with open(self.client_secrets_path, "w") as f:
-                f.write("{}")
     
     def _initialize_state(self) -> None:
         """Initialize the application state."""
@@ -107,12 +101,12 @@ class YouTubeUpdaterCore:
         self.channel_id = None
     
     @property
-    def status(self):
+    def status(self) -> str:
         """Get the current status message."""
         return self._status
     
     @property
-    def status_type(self):
+    def status_type(self) -> str:
         """Get the current status type."""
         return self._status_type
     
@@ -128,7 +122,6 @@ class YouTubeUpdaterCore:
             
         self._status = message
         self._status_type = status_type
-        print(f"Status: {message} ({status_type})")  # Add logging for debugging
     
     def setup_youtube(self) -> None:
         """Set up YouTube API and get initial state."""
@@ -155,7 +148,7 @@ class YouTubeUpdaterCore:
             )
             response = request.execute()
             
-            if response.get("items"):
+            if response["items"]:
                 self.channel_id = response["items"][0]["id"]
                 # Get current live stream title
                 live_request = self.youtube.search().list(
@@ -246,41 +239,44 @@ class YouTubeUpdaterCore:
             f.write(f"{self.DEFAULT_TITLE}\n")
     
     def _archive_title(self, title: str) -> None:
-        """Archive a title that has been used.
+        """Archive a title that has been successfully applied to the stream.
         
         Args:
-            title: Title to archive
+            title: The title to archive
         """
         try:
-            # Add to applied titles file
-            with open(self.applied_titles_file, "a") as f:
-                f.write(f"{title}\n")
-            
-            # Add to history log with timestamp
+            # Add the title to applied-titles.txt with timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Remove the title from titles.txt
+            if os.path.exists(self.titles_file):
+                with open(self.titles_file, "r") as f:
+                    titles = [line.strip() for line in f if line.strip()]
+                
+                if title in titles:
+                    titles.remove(title)
+                    
+                    with open(self.titles_file, "w") as f:
+                        f.write("\n".join(titles) + "\n")
+            
+            # Add to applied titles
+            with open(self.applied_titles_file, "a") as f:
+                f.write(f"{timestamp} - {title}\n")
+            
+            # Log the change
             with open(self.history_log, "a") as f:
-                f.write(f"{timestamp}: {title}\n")
-            
-            # Remove from titles list
-            if title in self.titles:
-                self.titles.remove(title)
-            
-            # Update titles file
-            with open(self.titles_file, "w") as f:
-                f.write("\n".join(self.titles) + "\n" if self.titles else "")
-            
-            self._set_status(f"Title archived: {title}", "success")
+                f.write(f"{timestamp} - Title updated: {title}\n")
             
         except Exception as e:
             self._set_status(f"Error archiving title: {str(e)}", "error")
     
     def check_live_status(self) -> None:
         """Check if the channel is currently live streaming."""
-        if not self.youtube:
-            self._set_status("YouTube client not initialized", "error")
-            return
-        
         try:
+            if not self.youtube or not self.channel_id:
+                self._set_status("YouTube API not initialized", "error")
+                return
+            
             request = self.youtube.search().list(
                 part="snippet",
                 channelId=self.channel_id,
@@ -289,8 +285,9 @@ class YouTubeUpdaterCore:
             )
             response = request.execute()
             
-            if response["items"]:
+            if response.get("items"):
                 self.is_live = True
+                self.current_title = response["items"][0]["snippet"]["title"]
                 self._set_status("Channel is live", "success")
             else:
                 self.is_live = False
@@ -301,17 +298,21 @@ class YouTubeUpdaterCore:
             self._set_status(f"Error checking live status: {str(e)}", "error")
     
     def update_title(self) -> None:
-        """Update the title of the current live stream."""
-        if not self.youtube:
-            self._set_status("YouTube client not initialized", "error")
-            return
-        
-        if not self.is_live:
-            self._set_status("Channel is not live", "warning")
-            return
-        
+        """Update the current live stream title."""
         try:
-            # Get the current live broadcast
+            if not self.youtube or not self.channel_id:
+                self._set_status("YouTube API not initialized", "error")
+                return
+            
+            if not self.is_live:
+                self._set_status("Cannot update title: Channel is not live", "warning")
+                return
+            
+            if not self.titles:
+                self._set_status("No titles available to update", "warning")
+                return
+            
+            # Get the current live video ID
             request = self.youtube.search().list(
                 part="snippet",
                 channelId=self.channel_id,
@@ -320,87 +321,60 @@ class YouTubeUpdaterCore:
             )
             response = request.execute()
             
-            if not response["items"]:
-                self._set_status("No live broadcast found", "error")
+            if not response.get("items"):
+                self._set_status("Could not find live video", "error")
                 return
             
             video_id = response["items"][0]["id"]["videoId"]
             
-            # Only update if the title is different from what we want to set
-            if self.current_title != self.next_title:
-                # Update the video title
-                request = self.youtube.videos().update(
-                    part="snippet",
-                    body={
-                        "id": video_id,
-                        "snippet": {
-                            "title": self.next_title,
-                            "categoryId": "22"  # Gaming category
-                        }
+            # Update the video title
+            request = self.youtube.videos().update(
+                part="snippet",
+                body={
+                    "id": video_id,
+                    "snippet": {
+                        "title": self.next_title,
+                        "categoryId": response["items"][0]["snippet"]["categoryId"]
                     }
-                )
-                request.execute()
-                
-                # Log the update
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                with open(self.history_log, "a") as f:
-                    f.write(f"{timestamp} - Changed title from \"{self.current_title}\" to \"{self.next_title}\"\n")
-                
-                # Archive the old title and move to next
-                self._archive_title(self.next_title)
-                
-                # Update the current title to what we just set
-                self.current_title = self.next_title
-                
-                # Rotate to the next title
-                self._rotate_titles()
-                
-                self._set_status(f"Title updated to: {self.next_title}", "success")
-            else:
-                self._set_status("Title is already up to date", "info")
+                }
+            )
+            request.execute()
+            
+            # Archive the old title and rotate to next title
+            self._archive_title(self.next_title)
+            self._rotate_titles()
+            
+            self._set_status("Title updated successfully", "success")
         
         except Exception as e:
             self._set_status(f"Error updating title: {str(e)}", "error")
-            # Log error to history
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(self.history_log, "a") as f:
-                f.write(f"{timestamp} - Error updating title: {str(e)}\n")
     
     def _rotate_titles(self) -> None:
         """Rotate to the next title in the list."""
-        if not self.titles:
-            return
-            
-        current_index = self.titles.index(self.next_title)
-        next_index = (current_index + 1) % len(self.titles)
-        self.next_title = self.titles[next_index]
+        if self.titles:
+            self.titles.append(self.titles.pop(0))
+            self.next_title = self.titles[0]
     
-    def open_config_dir(self):
-        """Open the configuration directory in the system file explorer."""
+    def open_config_dir(self) -> None:
+        """Open the configuration directory in the system's file explorer."""
         try:
-            if sys.platform == "darwin":  # macOS
+            if sys.platform == "win32":
+                os.startfile(self.config_dir)
+            elif sys.platform == "darwin":
                 os.system(f"open '{self.config_dir}'")
-            elif sys.platform == "win32":  # Windows
-                os.system(f'explorer "{self.config_dir}"')
-            else:  # Linux and others
+            else:
                 os.system(f"xdg-open '{self.config_dir}'")
-            self._set_status("Opened configuration directory", "success")
         except Exception as e:
-            self._set_status(f"Error opening configuration directory: {str(e)}", "error")
+            self._set_status(f"Error opening config directory: {str(e)}", "error")
     
-    def open_titles_file(self):
-        """Open the titles file in the default text editor."""
+    def open_titles_file(self) -> None:
+        """Open the titles file in the system's default text editor."""
         try:
-            if not os.path.exists(self.titles_file):
-                with open(self.titles_file, 'w') as f:
-                    f.write("Live Stream\n")
-            
-            if sys.platform == "darwin":  # macOS
-                os.system(f'open "{self.titles_file}"')
-            elif sys.platform == "win32":  # Windows
-                os.system(f'notepad "{self.titles_file}"')
-            else:  # Linux and others
-                os.system(f'xdg-open "{self.titles_file}"')
-            self._set_status("Opened titles file", "success")
+            if sys.platform == "win32":
+                os.startfile(self.titles_file)
+            elif sys.platform == "darwin":
+                os.system(f"open '{self.titles_file}'")
+            else:
+                os.system(f"xdg-open '{self.titles_file}'")
         except Exception as e:
             self._set_status(f"Error opening titles file: {str(e)}", "error") 

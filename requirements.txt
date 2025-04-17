@@ -1,6 +1,14 @@
-google-api-python-client
-google-auth-oauthlib
-google-auth-httplib2
+google-api-python-client>=2.0.0
+google-auth-oauthlib>=0.4.6
+google-auth-httplib2>=0.1.0
+PyQt6>=6.4.0
+urllib3>=2.0.0
 py2app
+
+# Development dependencies
 pytest>=7.0.0
 pytest-cov>=4.0.0
+pytest-qt>=4.2.0
+pytest-mock>=3.10.0
+py2app>=0.28.0  # For macOS app bundling
+pyinstaller>=5.0.0  # For Windows app bundling

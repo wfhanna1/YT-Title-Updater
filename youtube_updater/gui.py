@@ -1,10 +1,13 @@
 import os
 import time
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                           QPushButton, QLabel, QMenuBar, QMenu, QStatusBar)
+                           QPushButton, QLabel, QMenuBar, QMenu, QStatusBar,
+                           QApplication)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from .core import YouTubeUpdaterCore
+from pathlib import Path
+from typing import Optional, Union
 
 class YouTubeUpdaterGUI(QMainWindow):
     """GUI implementation for YouTube Title Updater."""
@@ -137,4 +140,17 @@ class YouTubeUpdaterGUI(QMainWindow):
         self.core.check_live_status()
         if self.core.is_live:
             self.core.update_title()
-        self.update_display() 
+        self.update_display()
+
+def main(config_dir: Optional[Union[str, Path]] = None):
+    """Main entry point for the application.
+    
+    Args:
+        config_dir: Optional directory for configuration files.
+                   Can be a string path or Path object.
+    """
+    app = QApplication([])
+    core = YouTubeUpdaterCore(config_dir=config_dir)
+    window = YouTubeUpdaterGUI(core=core)
+    window.show()
+    app.exec() 
