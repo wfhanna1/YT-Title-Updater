@@ -44,12 +44,12 @@ python3 setup.py py2app
 
 ---
 
-## 📁 What's in the Zip
+## 📁 What's in the Codebase
 - `youtube_menu_bar_app.py`: Main app (menu bar GUI)
 - `auth_setup.py`: Auth handler with refresh token support
 - `titles.txt`: Your stream titles
 - `history.log`: Log of updates
-- `client_secrets.json`: Sample file (replace with your own from Google)
+- `client_secrets.json`: Add file and replace with your own from Google
 
 ---
 
