@@ -1,129 +1,131 @@
 import os
 import time
-import tkinter as tk
-from tkinter import ttk, messagebox
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                           QPushButton, QLabel, QMenuBar, QMenu, QStatusBar)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from .core import YouTubeUpdaterCore
 
-class YouTubeUpdaterGUI:
+class YouTubeUpdaterGUI(QMainWindow):
     """GUI implementation for YouTube Title Updater."""
     
-    def __init__(self, root, core=None):
-        """
-        Initialize the GUI.
+    def __init__(self, core=None):
+        """Initialize the GUI.
         
         Args:
-            root: tkinter root window
             core (YouTubeUpdaterCore, optional): Core functionality instance.
                                                If None, creates a new instance.
         """
-        self.root = root
-        self.root.title("YouTube Title Updater")
-        self.root.geometry("600x400")  # Made window larger
+        super().__init__()
+        self.setWindowTitle("YouTube Title Updater")
+        self.setGeometry(100, 100, 600, 400)
         
         # Initialize core functionality
         self.core = core if core is not None else YouTubeUpdaterCore()
         
+        # Create central widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        self.layout = QVBoxLayout(central_widget)
+        
         # Create GUI elements
         self.create_menu()
-        self.create_main_frame()
         self.create_title_labels()
         self.create_buttons()
+        self.create_status_bar()
         
         # Update display immediately
         self.update_display()
     
     def create_menu(self):
         """Create the application menu bar."""
-        menubar = tk.Menu(self.root)
-        self.root.config(menu=menubar)
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("File")
+        file_menu.setObjectName("File")
         
-        # File menu
-        file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Open Config Folder", command=self.core.open_config_dir)
-        file_menu.add_command(label="Open Titles File", command=self.core.open_titles_file)
-        file_menu.add_separator()
-        file_menu.add_command(label="Check Now", command=self.check_status)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.root.quit)
-    
-    def create_main_frame(self):
-        """Create the main frame for the GUI."""
-        self.main_frame = ttk.Frame(self.root, padding="10")
-        self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Add menu actions
+        open_config_action = file_menu.addAction("Open Config Folder")
+        open_config_action.triggered.connect(self.core.open_config_dir)
         
-        # Configure grid
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        self.main_frame.columnconfigure(0, weight=1)
+        open_titles_action = file_menu.addAction("Open Titles File")
+        open_titles_action.triggered.connect(self.core.open_titles_file)
+        
+        file_menu.addSeparator()
+        
+        check_now_action = file_menu.addAction("Check Now")
+        check_now_action.triggered.connect(self.check_status)
+        
+        file_menu.addSeparator()
+        
+        exit_action = file_menu.addAction("Exit")
+        exit_action.triggered.connect(self.close)
     
     def create_title_labels(self):
         """Create labels for displaying current and next titles."""
         # Current Title
-        ttk.Label(self.main_frame, text="Current Title:", 
-                 font=('Arial', 12, 'bold')).grid(row=0, column=0, 
-                                                sticky=tk.W, pady=5)
-        self.current_title_label = ttk.Label(self.main_frame, 
-                                           text=self.core.current_title,
-                                           font=('Arial', 12),
-                                           wraplength=550)  # Added wraplength
-        self.current_title_label.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=5)
+        current_title_header = QLabel("Current Title:")
+        current_title_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.layout.addWidget(current_title_header)
+        
+        self.current_title_display = QLabel(self.core.current_title)
+        self.current_title_display.setFont(QFont("Arial", 12))
+        self.current_title_display.setWordWrap(True)
+        self.layout.addWidget(self.current_title_display)
         
         # Next Title
-        ttk.Label(self.main_frame, text="Next Title:", 
-                 font=('Arial', 12, 'bold')).grid(row=2, column=0, 
-                                                sticky=tk.W, pady=5)
-        self.next_title_label = ttk.Label(self.main_frame, 
-                                        text=self.core.next_title,
-                                        font=('Arial', 12),
-                                        wraplength=550)  # Added wraplength
-        self.next_title_label.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
+        next_title_header = QLabel("Next Title:")
+        next_title_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.layout.addWidget(next_title_header)
         
-        # Status
-        self.status_label = ttk.Label(self.main_frame, text=self.core.status,
-                                    font=('Arial', 10),
-                                    wraplength=550)  # Added wraplength
-        self.status_label.grid(row=4, column=0, sticky=(tk.W, tk.E), pady=5)
+        self.next_title_display = QLabel(self.core.next_title)
+        self.next_title_display.setFont(QFont("Arial", 12))
+        self.next_title_display.setWordWrap(True)
+        self.layout.addWidget(self.next_title_display)
     
     def create_buttons(self):
         """Create action buttons."""
-        button_frame = ttk.Frame(self.main_frame)
-        button_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), pady=10)
+        button_layout = QHBoxLayout()
         
         # Update Title Button
-        self.update_button = ttk.Button(button_frame, text="Update Title",
-                                      command=self.update_title)
-        self.update_button.pack(side=tk.LEFT, padx=5)
+        self.update_button = QPushButton("Update Title")
+        self.update_button.clicked.connect(self.update_title)
+        button_layout.addWidget(self.update_button)
         
         # Open Titles Button
-        self.open_titles_button = ttk.Button(button_frame, text="Open Titles File",
-                                           command=self.core.open_titles_file)
-        self.open_titles_button.pack(side=tk.LEFT, padx=5)
-    
-    def update_display(self):
-        """Update the display with current information."""
-        self.current_title_label.config(text=self.core.current_title)
-        self.next_title_label.config(text=self.core.next_title)
+        self.open_titles_button = QPushButton("Open Titles File")
+        self.open_titles_button.clicked.connect(self.core.open_titles_file)
+        button_layout.addWidget(self.open_titles_button)
         
-        # Update status label with color based on status type
+        self.layout.addLayout(button_layout)
+    
+    def create_status_bar(self):
+        """Create the status bar."""
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
+        self.update_status()
+    
+    def update_status(self):
+        """Update the status bar with current status."""
+        status_text = self.core.status
+        if self.core.status_type != "error" and not hasattr(self.core, "_test_mode"):
+            status_text += f" (Last updated: {time.strftime('%H:%M:%S')})"
+        
+        # Set status bar color based on status type
         colors = {
             "success": "green",
             "error": "red",
             "warning": "orange",
             "info": "black"
         }
-        status_text = self.core.status
-        if self.core.status_type != "error":
-            status_text += f" (Last updated: {time.strftime('%H:%M:%S')})"
-        
-        self.status_label.config(
-            text=status_text,
-            foreground=colors.get(self.core.status_type, "black")
-        )
-        
-        # If there's an error, show it in a message box
-        if self.core.status_type == "error":
-            messagebox.showerror("Error", self.core.status)
+        color = colors.get(self.core.status_type, "black")
+        self.statusBar.setStyleSheet(f"color: {color};")
+        self.statusBar.showMessage(status_text)
+    
+    def update_display(self):
+        """Update the display with current information."""
+        self.current_title_display.setText(self.core.current_title)
+        self.next_title_display.setText(self.core.next_title)
+        self.update_status()
     
     def check_status(self):
         """Check live status and update display."""
@@ -132,7 +134,6 @@ class YouTubeUpdaterGUI:
     
     def update_title(self):
         """Update the current live stream title."""
-        # First check if we're live
         self.core.check_live_status()
         if self.core.is_live:
             self.core.update_title()

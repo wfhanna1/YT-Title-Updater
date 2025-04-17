@@ -21,7 +21,12 @@ class YouTubeUpdaterCore:
     """
     
     # Constants
-    DEFAULT_CONFIG_DIR = "~/Documents/yt_title_updater"
+    DEFAULT_CONFIG_DIR = os.path.join(
+        os.path.expanduser("~"),
+        "Library/Application Support/yt_title_updater" if sys.platform == "darwin"
+        else "AppData/Roaming/yt_title_updater" if sys.platform == "win32"
+        else ".config/yt_title_updater"
+    )
     DEFAULT_TITLE = "Live Stream"
     STATUS_TYPES = ("info", "success", "error", "warning")
     
@@ -70,15 +75,21 @@ class YouTubeUpdaterCore:
         self.client_secrets_path = os.path.join(self.config_dir, "client_secrets.json")
         self.history_log = os.path.join(self.config_dir, "history.log")
         
-        # Ensure applied-titles.txt exists
-        if not os.path.exists(self.applied_titles_file):
-            with open(self.applied_titles_file, "w") as f:
-                f.write("")
+        # Create empty files if they don't exist
+        for file_path in [self.titles_file, self.applied_titles_file, self.history_log]:
+            if not os.path.exists(file_path):
+                with open(file_path, "w") as f:
+                    f.write("")
         
-        # Ensure history.log exists
-        if not os.path.exists(self.history_log):
-            with open(self.history_log, "w") as f:
-                f.write("")
+        # Create empty token.pickle if it doesn't exist
+        if not os.path.exists(self.token_path):
+            with open(self.token_path, "wb") as f:
+                f.write(b"")
+        
+        # Create empty client_secrets.json if it doesn't exist
+        if not os.path.exists(self.client_secrets_path):
+            with open(self.client_secrets_path, "w") as f:
+                f.write("{}")
     
     def _initialize_state(self) -> None:
         """Initialize the application state."""
@@ -140,7 +151,7 @@ class YouTubeUpdaterCore:
             )
             response = request.execute()
             
-            if response["items"]:
+            if response.get("items"):
                 self.channel_id = response["items"][0]["id"]
                 # Get current live stream title
                 live_request = self.youtube.search().list(
@@ -231,59 +242,33 @@ class YouTubeUpdaterCore:
             f.write(f"{self.DEFAULT_TITLE}\n")
     
     def _archive_title(self, title: str) -> None:
-        """
-        Archive a title that has been successfully applied to the stream.
+        """Archive a title that has been used.
         
         Args:
-            title (str): The title to archive
+            title: Title to archive
         """
         try:
-            # Add the title to applied-titles.txt with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Add to applied titles file
+            with open(self.applied_titles_file, "a") as f:
+                f.write(f"{title}\n")
             
-            # Remove the title from titles.txt
-            if os.path.exists(self.titles_file):
-                with open(self.titles_file, "r") as f:
-                    titles = [line.strip() for line in f if line.strip()]
-                
-                # Check if title exists
-                if title not in titles:
-                    error_msg = f"Title not found: {title}"
-                    # Log error to history
-                    with open(self.history_log, "a") as f:
-                        f.write(f"{timestamp} - Error: {error_msg}\n")
-                    raise ValueError(error_msg)
-                
-                # Add to history log
-                with open(self.history_log, "a") as f:
-                    f.write(f"{timestamp} - Title updated: {title}\n")
-                
-                # Add to applied-titles.txt
-                with open(self.applied_titles_file, "a") as f:
-                    f.write(f"{timestamp} - {title}\n")
-                
-                # Remove the applied title
-                titles.remove(title)
-                
-                # Write back the remaining titles
-                with open(self.titles_file, "w") as f:
-                    for remaining_title in titles:
-                        f.write(f"{remaining_title}\n")
-                
-                self._set_status(f"Title archived: {title}", "success")
-            else:
-                error_msg = "Titles file not found"
-                # Log error to history
-                with open(self.history_log, "a") as f:
-                    f.write(f"{timestamp} - Error: {error_msg}\n")
-                raise FileNotFoundError(error_msg)
-                
+            # Add to history log with timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(self.history_log, "a") as f:
+                f.write(f"{timestamp}: {title}\n")
+            
+            # Remove from titles list
+            if title in self.titles:
+                self.titles.remove(title)
+            
+            # Update titles file
+            with open(self.titles_file, "w") as f:
+                f.write("\n".join(self.titles) + "\n" if self.titles else "")
+            
+            self._set_status(f"Title archived: {title}", "success")
+            
         except Exception as e:
             self._set_status(f"Error archiving title: {str(e)}", "error")
-            # Log error to history if not already logged
-            if not str(e).startswith("Title not found") and not str(e).startswith("Titles file not found"):
-                with open(self.history_log, "a") as f:
-                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Error: {str(e)}\n")
     
     def check_live_status(self) -> None:
         """Check if the channel is currently live streaming."""
