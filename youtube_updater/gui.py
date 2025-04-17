@@ -99,6 +99,11 @@ class YouTubeUpdaterGUI:
                                      command=self.check_status)
         self.check_button.pack(side=tk.LEFT, padx=5)
         
+        # Update Title Button
+        self.update_button = ttk.Button(button_frame, text="Update Title",
+                                      command=self.update_title)
+        self.update_button.pack(side=tk.LEFT, padx=5)
+        
         # Open Titles Button
         self.open_titles_button = ttk.Button(button_frame, text="Open Titles File",
                                            command=self.core.open_titles_file)
@@ -138,4 +143,9 @@ class YouTubeUpdaterGUI:
         """Schedule periodic updates."""
         self.check_status()
         # Schedule next update in 60 seconds
-        self.root.after(60000, self.schedule_update) 
+        self.root.after(60000, self.schedule_update)
+    
+    def update_title(self):
+        """Update the current live stream title."""
+        self.core.update_title()
+        self.update_display() 

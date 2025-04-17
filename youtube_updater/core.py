@@ -1,54 +1,84 @@
 import os
 import sys
 import pickle
+from typing import Optional, Tuple, List
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 import urllib3
 import shutil
+from datetime import datetime
 
 # Suppress the OpenSSL warning
 urllib3.disable_warnings(urllib3.exceptions.NotOpenSSLWarning)
 
 class YouTubeUpdaterCore:
-    """Core functionality for YouTube title updating."""
+    """Core functionality for YouTube title updating.
     
-    def __init__(self, config_dir=None):
-        """
-        Initialize the YouTube updater core.
+    This class handles the core functionality of the YouTube Title Updater,
+    including YouTube API interaction, title management, and file operations.
+    """
+    
+    # Constants
+    DEFAULT_CONFIG_DIR = "~/Documents/yt_title_updater"
+    DEFAULT_TITLE = "Live Stream"
+    STATUS_TYPES = ("info", "success", "error", "warning")
+    
+    def __init__(self, config_dir: Optional[str] = None) -> None:
+        """Initialize the YouTube updater core.
         
         Args:
-            config_dir (str, optional): Directory for configuration files.
-                                      Defaults to ~/Documents/yt_title_updater/
+            config_dir: Directory for configuration files.
+                       Defaults to ~/Documents/yt_title_updater/
         """
-        if config_dir is None:
-            config_dir = os.path.expanduser("~/Documents/yt_title_updater")
-        
-        # Ensure config directory exists
-        os.makedirs(config_dir, exist_ok=True)
-        
-        # Set up paths
-        self.config_dir = config_dir
-        self.titles_file = os.path.join(config_dir, "titles.txt")
-        self.token_path = os.path.join(config_dir, "token.pickle")
-        self.client_secrets_path = os.path.join(config_dir, "client_secrets.json")
-        
-        # Initialize state
-        self.youtube = None
-        self.current_title = "Not Live"
-        self.next_title = "No titles available"
-        self.titles = []
-        self._status = "Initializing"
-        self._status_type = "info"  # Can be: info, success, error, warning
+        self.config_dir = self._setup_config_dir(config_dir)
+        self._setup_file_paths()
+        self._initialize_state()
         
         # Check for client secrets file
         if not os.path.exists(self.client_secrets_path):
-            self._set_status("Client secrets file not found. Please copy it to: " + self.client_secrets_path, "error")
+            self._set_status(
+                f"Client secrets file not found. Please copy it to: {self.client_secrets_path}",
+                "error"
+            )
             return
         
-        # Initialize YouTube API
+        # Initialize YouTube API and load titles
         self.setup_youtube()
         self.load_titles()
+    
+    def _setup_config_dir(self, config_dir: Optional[str]) -> str:
+        """Set up the configuration directory.
+        
+        Args:
+            config_dir: Optional custom config directory path
+            
+        Returns:
+            str: Path to the configuration directory
+        """
+        if config_dir is None:
+            config_dir = os.path.expanduser(self.DEFAULT_CONFIG_DIR)
+        os.makedirs(config_dir, exist_ok=True)
+        return config_dir
+    
+    def _setup_file_paths(self) -> None:
+        """Set up all file paths used by the application."""
+        self.titles_file = os.path.join(self.config_dir, "titles.txt")
+        self.applied_titles_file = os.path.join(self.config_dir, "applied-titles.txt")
+        self.token_path = os.path.join(self.config_dir, "token.pickle")
+        self.client_secrets_path = os.path.join(self.config_dir, "client_secrets.json")
+    
+    def _initialize_state(self) -> None:
+        """Initialize the application state."""
+        self.youtube = None
+        self.current_title = "Not Live"
+        self.next_title = "No titles available"
+        self.titles: List[str] = []
+        self._status = "Initializing"
+        self._status_type = "info"
+        self.is_live = False
+        self.channel_id = None
     
     @property
     def status(self):
@@ -60,122 +90,236 @@ class YouTubeUpdaterCore:
         """Get the current status type."""
         return self._status_type
     
-    def _set_status(self, message, status_type="info"):
-        """
-        Set status message and type.
+    def _set_status(self, message: str, status_type: str = "info") -> None:
+        """Set status message and type.
         
         Args:
-            message (str): Status message
-            status_type (str): One of: info, success, error, warning
+            message: Status message
+            status_type: One of: info, success, error, warning
         """
+        if status_type not in self.STATUS_TYPES:
+            raise ValueError(f"Invalid status type. Must be one of: {self.STATUS_TYPES}")
+            
         self._status = message
         self._status_type = status_type
         print(f"Status: {message} ({status_type})")  # Add logging for debugging
     
-    def setup_youtube(self):
+    def setup_youtube(self) -> None:
         """Set up YouTube API client."""
         try:
             if not os.path.exists(self.client_secrets_path):
-                self._set_status("Client secrets file not found. Please copy it to: " + self.client_secrets_path, "error")
+                self._set_status(
+                    f"Client secrets file not found. Please copy it to: {self.client_secrets_path}",
+                    "error"
+                )
                 return
             
-            creds = None
-            if os.path.exists(self.token_path):
-                with open(self.token_path, "rb") as token:
-                    creds = pickle.load(token)
-            
+            creds = self._load_credentials()
             if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    try:
-                        creds.refresh(Request())
-                    except Exception as e:
-                        self._set_status(f"Error refreshing credentials: {str(e)}", "error")
-                        return
-                else:
-                    try:
-                        flow = InstalledAppFlow.from_client_secrets_file(
-                            self.client_secrets_path,
-                            ["https://www.googleapis.com/auth/youtube"]
-                        )
-                        creds = flow.run_local_server(port=0)
-                    except Exception as e:
-                        self._set_status(f"Error during authentication: {str(e)}", "error")
-                        return
-                
-                with open(self.token_path, "wb") as token:
-                    pickle.dump(creds, token)
-
+                creds = self._refresh_or_authenticate(creds)
+                if not creds:
+                    return
+            
             self.youtube = build("youtube", "v3", credentials=creds)
-            self._set_status("Connected to YouTube API", "success")
+            
+            # Get the channel ID
+            request = self.youtube.channels().list(
+                part="id",
+                mine=True
+            )
+            response = request.execute()
+            
+            if response["items"]:
+                self.channel_id = response["items"][0]["id"]
+                self._set_status("Connected to YouTube API", "success")
+            else:
+                self._set_status("Could not retrieve channel ID", "error")
         
         except Exception as e:
             self._set_status(f"Error connecting to YouTube API: {str(e)}", "error")
     
-    def load_titles(self):
+    def _load_credentials(self) -> Optional[Credentials]:
+        """Load credentials from token file if it exists.
+        
+        Returns:
+            Optional[Credentials]: Loaded credentials or None if file doesn't exist
+        """
+        if os.path.exists(self.token_path):
+            with open(self.token_path, "rb") as token:
+                return pickle.load(token)
+        return None
+    
+    def _refresh_or_authenticate(self, creds: Optional[Credentials]) -> Optional[Credentials]:
+        """Refresh existing credentials or authenticate new ones.
+        
+        Args:
+            creds: Existing credentials to refresh, or None for new authentication
+            
+        Returns:
+            Optional[Credentials]: Refreshed or new credentials, or None if failed
+        """
+        try:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    self.client_secrets_path,
+                    ["https://www.googleapis.com/auth/youtube"]
+                )
+                creds = flow.run_local_server(port=0)
+            
+            # Save the credentials
+            with open(self.token_path, "wb") as token:
+                pickle.dump(creds, token)
+            return creds
+            
+        except Exception as e:
+            self._set_status(f"Error during authentication: {str(e)}", "error")
+            return None
+    
+    def load_titles(self) -> None:
         """Load titles from the titles file."""
         try:
             if os.path.exists(self.titles_file):
-                with open(self.titles_file, "r") as f:
-                    self.titles = [line.strip() for line in f if line.strip()]
-                if self.titles:
-                    self.next_title = self.titles[0]
+                self._load_existing_titles()
             else:
-                self.titles = ["Live Stream"]
-                self.next_title = self.titles[0]
-                # Create the file with default title
-                with open(self.titles_file, "w") as f:
-                    f.write("Live Stream\n")
+                self._create_default_titles_file()
             
             self._set_status("Titles loaded successfully", "success")
         
         except Exception as e:
             self._set_status(f"Error loading titles: {str(e)}", "error")
     
-    def check_live_status(self):
+    def _load_existing_titles(self) -> None:
+        """Load titles from existing titles file."""
+        with open(self.titles_file, "r") as f:
+            self.titles = [line.strip() for line in f if line.strip()]
+            if self.titles:
+                self.next_title = self.titles[0]
+    
+    def _create_default_titles_file(self) -> None:
+        """Create titles file with default title."""
+        self.titles = [self.DEFAULT_TITLE]
+        self.next_title = self.titles[0]
+        with open(self.titles_file, "w") as f:
+            f.write(f"{self.DEFAULT_TITLE}\n")
+    
+    def _archive_title(self, title):
         """
-        Check live broadcast status and update title if needed.
+        Archive a title that has been successfully applied to the stream.
         
-        Returns:
-            tuple: (current_title, next_title, status_message, status_type)
+        Args:
+            title (str): The title to archive
         """
         try:
-            if not self.youtube:
-                self._set_status("YouTube API not initialized. Please check client secrets file.", "error")
-                return self.current_title, self.next_title, self.status, self.status_type
+            # Add the title to applied-titles.txt with timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(self.applied_titles_file, "a") as f:
+                f.write(f"{timestamp} - {title}\n")
             
-            request = self.youtube.liveBroadcasts().list(
+            # Remove the title from titles.txt
+            if os.path.exists(self.titles_file):
+                with open(self.titles_file, "r") as f:
+                    titles = [line.strip() for line in f if line.strip()]
+                
+                # Check if title exists
+                if title not in titles:
+                    raise ValueError(f"Title not found: {title}")
+                
+                # Remove the applied title
+                titles.remove(title)
+                
+                # Write back the remaining titles
+                with open(self.titles_file, "w") as f:
+                    for remaining_title in titles:
+                        f.write(f"{remaining_title}\n")
+                
+                self._set_status(f"Title archived: {title}", "success")
+            else:
+                raise FileNotFoundError("Titles file not found")
+                
+        except Exception as e:
+            self._set_status(f"Error archiving title: {str(e)}", "error")
+    
+    def check_live_status(self) -> None:
+        """Check if the channel is currently live streaming."""
+        if not self.youtube:
+            self._set_status("YouTube client not initialized", "error")
+            return
+        
+        try:
+            request = self.youtube.search().list(
                 part="snippet",
-                broadcastStatus="active",
-                broadcastType="all"
+                channelId=self.channel_id,
+                eventType="live",
+                type="video"
             )
             response = request.execute()
             
             if response["items"]:
-                broadcast = response["items"][0]
-                self.current_title = broadcast["snippet"]["title"]
-                
-                if self.titles:
-                    self.next_title = self.titles[0]
-                    if self.current_title != self.next_title:
-                        broadcast["snippet"]["title"] = self.next_title
-                        self.youtube.liveBroadcasts().update(
-                            part="snippet",
-                            body=broadcast
-                        ).execute()
-                        self.titles.pop(0)
-                        self.load_titles()
-                else:
-                    self.next_title = "No titles available"
+                self.is_live = True
+                self._set_status("Channel is live", "success")
             else:
-                self.current_title = "Not Live"
-                self.next_title = "No titles available"
-            
-            self._set_status("Status updated successfully", "success")
+                self.is_live = False
+                self._set_status("Channel is not live", "info")
         
         except Exception as e:
             self._set_status(f"Error checking live status: {str(e)}", "error")
+    
+    def update_title(self) -> None:
+        """Update the title of the current live stream."""
+        if not self.youtube:
+            self._set_status("YouTube client not initialized", "error")
+            return
         
-        return self.current_title, self.next_title, self.status, self.status_type
+        if not self.is_live:
+            self._set_status("Channel is not live", "warning")
+            return
+        
+        try:
+            # Get the current live broadcast
+            request = self.youtube.search().list(
+                part="snippet",
+                channelId=self.channel_id,
+                eventType="live",
+                type="video"
+            )
+            response = request.execute()
+            
+            if not response["items"]:
+                self._set_status("No live broadcast found", "error")
+                return
+            
+            video_id = response["items"][0]["id"]["videoId"]
+            
+            # Update the video title
+            request = self.youtube.videos().update(
+                part="snippet",
+                body={
+                    "id": video_id,
+                    "snippet": {
+                        "title": self.next_title,
+                        "categoryId": "22"  # Gaming category
+                    }
+                }
+            )
+            request.execute()
+            
+            # Move to next title
+            self._rotate_titles()
+            self._set_status(f"Title updated to: {self.next_title}", "success")
+        
+        except Exception as e:
+            self._set_status(f"Error updating title: {str(e)}", "error")
+    
+    def _rotate_titles(self) -> None:
+        """Rotate to the next title in the list."""
+        if not self.titles:
+            return
+            
+        current_index = self.titles.index(self.next_title)
+        next_index = (current_index + 1) % len(self.titles)
+        self.next_title = self.titles[next_index]
     
     def open_config_dir(self):
         """Open the configuration directory in the system file explorer."""
