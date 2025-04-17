@@ -17,9 +17,17 @@ if __name__ == "__main__":
     # Set up macOS-specific configurations
     os.environ["QT_QPA_PLATFORM"] = "cocoa"
     
+    # Get the application directory
+    if getattr(sys, 'frozen', False):
+        # If the application is run as a bundle (pyinstaller)
+        application_path = Path(sys._MEIPASS)
+    else:
+        # If the application is run as a script
+        application_path = Path(__file__).parent
+    
     # Create and run the application
     app = QApplication([])
-    core = YouTubeUpdaterCore(config_dir=project_root)
+    core = YouTubeUpdaterCore(config_dir=application_path)
     window = YouTubeUpdaterGUI(core=core)
     window.show()
     app.exec() 
