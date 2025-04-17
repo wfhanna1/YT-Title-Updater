@@ -407,11 +407,11 @@ class YouTubeUpdaterCore:
                     f.write("Live Stream\n")
             
             if sys.platform == "darwin":  # macOS
-                os.system(f"open '{self.titles_file}'")
+                os.system(f'open "{self.titles_file}"')
             elif sys.platform == "win32":  # Windows
                 os.system(f'notepad "{self.titles_file}"')
             else:  # Linux and others
-                os.system(f"xdg-open '{self.titles_file}'")
+                os.system(f'xdg-open "{self.titles_file}"')
             self._set_status("Opened titles file", "success")
         except Exception as e:
             self._set_status(f"Error opening titles file: {str(e)}", "error") 
