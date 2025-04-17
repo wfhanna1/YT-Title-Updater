@@ -31,10 +31,6 @@ class YouTubeUpdaterGUI:
         
         # Update display immediately
         self.update_display()
-        
-        # Start periodic updates if YouTube API is initialized
-        if self.core.youtube is not None:
-            self.schedule_update()
     
     def create_menu(self):
         """Create the application menu bar."""
@@ -140,10 +136,4 @@ class YouTubeUpdaterGUI:
         self.core.check_live_status()
         if self.core.is_live:
             self.core.update_title()
-        self.update_display()
-    
-    def schedule_update(self):
-        """Schedule periodic updates."""
-        self.update_title()
-        # Schedule next update in 60 seconds
-        self.root.after(60000, self.schedule_update) 
+        self.update_display() 
