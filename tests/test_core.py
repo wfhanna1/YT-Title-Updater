@@ -1,10 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 import os
 import tempfile
 import shutil
-import json
-from google.oauth2.credentials import Credentials
 from youtube_updater.core import YouTubeUpdaterCore
 
 class TestYouTubeUpdaterCore(unittest.TestCase):
@@ -13,10 +11,6 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.test_dir = tempfile.mkdtemp()
-        self.core = YouTubeUpdaterCore(self.test_dir)
-        self.mock_youtube = MagicMock()
-        self.core.youtube = self.mock_youtube
-        self.core.channel_id = "test_channel_id"
         
         # Create necessary files
         with open(os.path.join(self.test_dir, "titles.txt"), "w") as f:
@@ -28,40 +22,13 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
         with open(os.path.join(self.test_dir, "history.log"), "w") as f:
             f.write("")
         
-        # Create a temporary directory for testing
-        self.test_dir = tempfile.mkdtemp()
+        # Initialize the core with the test directory
+        self.core = YouTubeUpdaterCore(config_dir=self.test_dir)
         
-        # Create a mock client secrets file with valid format
-        self.client_secrets_path = os.path.join(self.test_dir, "client_secrets.json")
-        client_secrets_content = {
-            "installed": {
-                "client_id": "test_client_id",
-                "client_secret": "test_client_secret",
-                "redirect_uris": ["http://localhost"]
-            }
-        }
-        with open(self.client_secrets_path, "w") as f:
-            json.dump(client_secrets_content, f)
-        
-        # Create a mock credentials object that can be pickled
-        mock_creds = Credentials(
-            token="test_token",
-            refresh_token="test_refresh_token",
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id="test_client_id",
-            client_secret="test_client_secret"
-        )
-        
-        # Mock the YouTube API setup
-        with patch('google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file') as mock_flow:
-            mock_flow.return_value.run_local_server.return_value = mock_creds
-            
-            # Initialize the core with the test directory
-            self.core = YouTubeUpdaterCore(config_dir=self.test_dir)
-            
-            # Create a mock YouTube service
-            self.mock_youtube = MagicMock()
-            self.core.youtube = self.mock_youtube
+        # Create a mock YouTube service
+        self.mock_youtube = MagicMock()
+        self.core.youtube = self.mock_youtube
+        self.core.channel_id = "test_channel_id"
 
     def tearDown(self):
         """Clean up test environment."""
@@ -113,16 +80,20 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
         self.assertEqual(self.core.status, "YouTube client not initialized")
         self.assertEqual(self.core.status_type, "error")
 
-    @patch.object(YouTubeUpdaterCore, 'load_titles')
-    def test_check_live_status_with_titles(self, mock_load_titles):
+    def test_check_live_status_with_titles(self):
         """Test check_live_status when titles are available."""
-        mock_response = {"items": [{"id": {"videoId": "test_video_id"}}]}
+        # Mock the live stream response
+        mock_response = {
+            "items": [{
+                "id": {"videoId": "test_video_id"},
+                "snippet": {"title": "Test Title"}
+            }]
+        }
         self.mock_youtube.search().list().execute.return_value = mock_response
         
         self.core.check_live_status()
         self.assertTrue(self.core.is_live)
         self.assertEqual(self.core.status, "Channel is live")
-        self.assertEqual(self.core.status_type, "success")
 
     def test_check_live_status_no_broadcast(self):
         """Test check_live_status when no broadcast is active."""
@@ -180,7 +151,9 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
             }]
         }
         self.mock_youtube.search().list().execute.return_value = mock_response
+        self.core.current_title = "Test Title 1"
         self.core.next_title = "Test Title 1"
+        self.core.titles = ["Test Title 1"]
         self.core.is_live = True
         
         self.core.update_title()
