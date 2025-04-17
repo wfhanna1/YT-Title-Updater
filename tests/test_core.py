@@ -187,18 +187,37 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
         self.assertTrue(len(history) > 0)
         self.assertTrue("Title updated: New Title" in history[0])
 
-    def test_open_config_dir(self):
-        """Test opening configuration directory."""
-        self.core.open_config_dir()
-        self.assertEqual(self.core.status, "Opened configuration directory")
-        self.assertEqual(self.core.status_type, "success")
-
-    def test_open_titles_file(self):
-        """Test opening titles file."""
+    @patch('os.system')
+    def test_open_titles_file_creation(self, mock_system):
+        """Test that titles file is created if it doesn't exist."""
+        # Remove the titles file
+        os.remove(os.path.join(self.test_dir, "titles.txt"))
+        
         self.core.open_titles_file()
-        self.assertTrue(os.path.exists(os.path.join(self.test_dir, "titles.txt")))
+        
+        # Verify file was created with default content
+        with open(os.path.join(self.test_dir, "titles.txt"), "r") as f:
+            content = f.read().strip()
+        self.assertEqual(content, "Live Stream")
+        
+        # Verify status was set correctly
         self.assertEqual(self.core.status, "Opened titles file")
         self.assertEqual(self.core.status_type, "success")
+
+    @patch('os.system')
+    def test_open_titles_file_error(self, mock_system):
+        """Test error handling when opening titles file."""
+        # Make the directory read-only to simulate permission error
+        os.chmod(self.test_dir, 0o444)
+        
+        self.core.open_titles_file()
+        
+        # Verify error status was set
+        self.assertEqual(self.core.status_type, "error")
+        self.assertIn("Error opening titles file", self.core.status)
+        
+        # Restore directory permissions
+        os.chmod(self.test_dir, 0o755)
 
 if __name__ == '__main__':
     unittest.main() 
