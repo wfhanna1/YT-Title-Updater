@@ -68,6 +68,17 @@ class YouTubeUpdaterCore:
         self.applied_titles_file = os.path.join(self.config_dir, "applied-titles.txt")
         self.token_path = os.path.join(self.config_dir, "token.pickle")
         self.client_secrets_path = os.path.join(self.config_dir, "client_secrets.json")
+        self.history_log = os.path.join(self.config_dir, "history.log")
+        
+        # Ensure applied-titles.txt exists
+        if not os.path.exists(self.applied_titles_file):
+            with open(self.applied_titles_file, "w") as f:
+                f.write("")
+        
+        # Ensure history.log exists
+        if not os.path.exists(self.history_log):
+            with open(self.history_log, "w") as f:
+                f.write("")
     
     def _initialize_state(self) -> None:
         """Initialize the application state."""
@@ -204,7 +215,7 @@ class YouTubeUpdaterCore:
         with open(self.titles_file, "w") as f:
             f.write(f"{self.DEFAULT_TITLE}\n")
     
-    def _archive_title(self, title):
+    def _archive_title(self, title: str) -> None:
         """
         Archive a title that has been successfully applied to the stream.
         
@@ -214,8 +225,6 @@ class YouTubeUpdaterCore:
         try:
             # Add the title to applied-titles.txt with timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(self.applied_titles_file, "a") as f:
-                f.write(f"{timestamp} - {title}\n")
             
             # Remove the title from titles.txt
             if os.path.exists(self.titles_file):
@@ -224,7 +233,19 @@ class YouTubeUpdaterCore:
                 
                 # Check if title exists
                 if title not in titles:
-                    raise ValueError(f"Title not found: {title}")
+                    error_msg = f"Title not found: {title}"
+                    # Log error to history
+                    with open(self.history_log, "a") as f:
+                        f.write(f"{timestamp} - Error: {error_msg}\n")
+                    raise ValueError(error_msg)
+                
+                # Add to history log
+                with open(self.history_log, "a") as f:
+                    f.write(f"{timestamp} - Title updated: {title}\n")
+                
+                # Add to applied-titles.txt
+                with open(self.applied_titles_file, "a") as f:
+                    f.write(f"{timestamp} - {title}\n")
                 
                 # Remove the applied title
                 titles.remove(title)
@@ -236,10 +257,18 @@ class YouTubeUpdaterCore:
                 
                 self._set_status(f"Title archived: {title}", "success")
             else:
-                raise FileNotFoundError("Titles file not found")
+                error_msg = "Titles file not found"
+                # Log error to history
+                with open(self.history_log, "a") as f:
+                    f.write(f"{timestamp} - Error: {error_msg}\n")
+                raise FileNotFoundError(error_msg)
                 
         except Exception as e:
             self._set_status(f"Error archiving title: {str(e)}", "error")
+            # Log error to history if not already logged
+            if not str(e).startswith("Title not found") and not str(e).startswith("Titles file not found"):
+                with open(self.history_log, "a") as f:
+                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Error: {str(e)}\n")
     
     def check_live_status(self) -> None:
         """Check if the channel is currently live streaming."""
@@ -291,26 +320,40 @@ class YouTubeUpdaterCore:
                 return
             
             video_id = response["items"][0]["id"]["videoId"]
+            current_title = response["items"][0]["snippet"]["title"]
             
-            # Update the video title
-            request = self.youtube.videos().update(
-                part="snippet",
-                body={
-                    "id": video_id,
-                    "snippet": {
-                        "title": self.next_title,
-                        "categoryId": "22"  # Gaming category
+            # Only update if the title is different
+            if current_title != self.next_title:
+                # Update the video title
+                request = self.youtube.videos().update(
+                    part="snippet",
+                    body={
+                        "id": video_id,
+                        "snippet": {
+                            "title": self.next_title,
+                            "categoryId": "22"  # Gaming category
+                        }
                     }
-                }
-            )
-            request.execute()
-            
-            # Move to next title
-            self._rotate_titles()
-            self._set_status(f"Title updated to: {self.next_title}", "success")
+                )
+                request.execute()
+                
+                # Log the update
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                with open(self.history_log, "a") as f:
+                    f.write(f"{timestamp} - Title updated: {self.next_title}\n")
+                
+                # Archive the old title and move to next
+                self._archive_title(self.next_title)
+                self._rotate_titles()
+                self._set_status(f"Title updated to: {self.next_title}", "success")
+            else:
+                self._set_status("Title is already up to date", "info")
         
         except Exception as e:
             self._set_status(f"Error updating title: {str(e)}", "error")
+            # Log error to history
+            with open(self.history_log, "a") as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Error updating title: {str(e)}\n")
     
     def _rotate_titles(self) -> None:
         """Rotate to the next title in the list."""

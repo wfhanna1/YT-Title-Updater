@@ -94,11 +94,6 @@ class YouTubeUpdaterGUI:
         button_frame = ttk.Frame(self.main_frame)
         button_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), pady=10)
         
-        # Check Now Button
-        self.check_button = ttk.Button(button_frame, text="Check Now",
-                                     command=self.check_status)
-        self.check_button.pack(side=tk.LEFT, padx=5)
-        
         # Update Title Button
         self.update_button = ttk.Button(button_frame, text="Update Title",
                                       command=self.update_title)
@@ -123,7 +118,7 @@ class YouTubeUpdaterGUI:
         }
         status_text = self.core.status
         if self.core.status_type != "error":
-            status_text += f" (Last checked: {time.strftime('%H:%M:%S')})"
+            status_text += f" (Last updated: {time.strftime('%H:%M:%S')})"
         
         self.status_label.config(
             text=status_text,
@@ -139,13 +134,16 @@ class YouTubeUpdaterGUI:
         self.core.check_live_status()
         self.update_display()
     
-    def schedule_update(self):
-        """Schedule periodic updates."""
-        self.check_status()
-        # Schedule next update in 60 seconds
-        self.root.after(60000, self.schedule_update)
-    
     def update_title(self):
         """Update the current live stream title."""
-        self.core.update_title()
-        self.update_display() 
+        # First check if we're live
+        self.core.check_live_status()
+        if self.core.is_live:
+            self.core.update_title()
+        self.update_display()
+    
+    def schedule_update(self):
+        """Schedule periodic updates."""
+        self.update_title()
+        # Schedule next update in 60 seconds
+        self.root.after(60000, self.schedule_update) 

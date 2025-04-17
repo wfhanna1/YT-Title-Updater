@@ -18,6 +18,16 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
         self.core.youtube = self.mock_youtube
         self.core.channel_id = "test_channel_id"
         
+        # Create necessary files
+        with open(os.path.join(self.test_dir, "titles.txt"), "w") as f:
+            f.write("Test Title 1\nTest Title 2\n")
+        
+        # Create empty applied-titles.txt and history.log
+        with open(os.path.join(self.test_dir, "applied-titles.txt"), "w") as f:
+            f.write("")
+        with open(os.path.join(self.test_dir, "history.log"), "w") as f:
+            f.write("")
+        
         # Create a temporary directory for testing
         self.test_dir = tempfile.mkdtemp()
         
@@ -131,15 +141,78 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
         
         self.core._archive_title("Test Title 1")
         
+        # Check titles.txt
         with open(os.path.join(self.test_dir, "titles.txt"), "r") as f:
             remaining_titles = [line.strip() for line in f if line.strip()]
         self.assertEqual(remaining_titles, ["Test Title 2"])
+        
+        # Check applied-titles.txt
+        with open(os.path.join(self.test_dir, "applied-titles.txt"), "r") as f:
+            applied_titles = f.readlines()
+        self.assertTrue(len(applied_titles) > 0)
+        self.assertTrue("Test Title 1" in applied_titles[0])
+        
+        # Check history.log
+        with open(os.path.join(self.test_dir, "history.log"), "r") as f:
+            history = f.readlines()
+        self.assertTrue(len(history) > 0)
+        self.assertTrue("Title updated: Test Title 1" in history[0])
 
     def test_archive_title_error(self):
         """Test archiving a title with error."""
         self.core._archive_title("Nonexistent Title")
         self.assertIn("Error archiving title", self.core.status)
         self.assertEqual(self.core.status_type, "error")
+        
+        # Check history.log for error
+        with open(os.path.join(self.test_dir, "history.log"), "r") as f:
+            history = f.readlines()
+        self.assertTrue(len(history) > 0)
+        self.assertTrue("Error" in history[0])
+
+    def test_update_title_no_change(self):
+        """Test updating title when it's already current."""
+        # Setup mock response with current title
+        mock_response = {
+            "items": [{
+                "id": {"videoId": "test_video_id"},
+                "snippet": {"title": "Test Title 1"}
+            }]
+        }
+        self.mock_youtube.search().list().execute.return_value = mock_response
+        self.core.next_title = "Test Title 1"
+        self.core.is_live = True
+        
+        self.core.update_title()
+        self.assertEqual(self.core.status, "Title is already up to date")
+        self.assertEqual(self.core.status_type, "info")
+
+    def test_update_title_success(self):
+        """Test successful title update."""
+        # Setup mock response
+        mock_response = {
+            "items": [{
+                "id": {"videoId": "test_video_id"},
+                "snippet": {"title": "Current Title"}
+            }]
+        }
+        self.mock_youtube.search().list().execute.return_value = mock_response
+        self.mock_youtube.videos().update().execute.return_value = {}
+        
+        # Add the title to the list
+        self.core.titles = ["New Title"]
+        self.core.next_title = "New Title"
+        self.core.is_live = True
+        
+        self.core.update_title()
+        self.assertEqual(self.core.status, "Title updated to: New Title")
+        self.assertEqual(self.core.status_type, "success")
+        
+        # Check history.log
+        with open(os.path.join(self.test_dir, "history.log"), "r") as f:
+            history = f.readlines()
+        self.assertTrue(len(history) > 0)
+        self.assertTrue("Title updated: New Title" in history[0])
 
     def test_open_config_dir(self):
         """Test opening configuration directory."""
