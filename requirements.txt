@@ -2,3 +2,5 @@ google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
 py2app
+pytest>=7.0.0
+pytest-cov>=4.0.0
