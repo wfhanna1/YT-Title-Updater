@@ -355,7 +355,7 @@ class YouTubeUpdaterCore:
                 # Log the update
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 with open(self.history_log, "a") as f:
-                    f.write(f"{timestamp} - Title updated: {self.next_title}\n")
+                    f.write(f"{timestamp} - Changed title from \"{self.current_title}\" to \"{self.next_title}\"\n")
                 
                 # Archive the old title and move to next
                 self._archive_title(self.next_title)
@@ -373,8 +373,9 @@ class YouTubeUpdaterCore:
         except Exception as e:
             self._set_status(f"Error updating title: {str(e)}", "error")
             # Log error to history
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open(self.history_log, "a") as f:
-                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Error updating title: {str(e)}\n")
+                f.write(f"{timestamp} - Error updating title: {str(e)}\n")
     
     def _rotate_titles(self) -> None:
         """Rotate to the next title in the list."""
