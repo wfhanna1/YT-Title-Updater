@@ -70,6 +70,10 @@ class YouTubeTitleUpdaterGUI:
         # Check Now Button
         self.check_button = ttk.Button(self.main_frame, text="Check Now", command=self.check_live_status)
         self.check_button.grid(row=5, column=0, sticky=tk.W, pady=10)
+        
+        # Open Titles File Button
+        self.open_titles_button = ttk.Button(self.main_frame, text="Open Titles File", command=self.open_titles_file)
+        self.open_titles_button.grid(row=5, column=1, sticky=tk.W, pady=10)
     
     def setup_youtube(self):
         try:
@@ -115,6 +119,15 @@ class YouTubeTitleUpdaterGUI:
             os.system(f"open {os.path.dirname(self.titles_file)}")
         except Exception as e:
             messagebox.showerror("Error", f"Could not open titles folder: {str(e)}")
+    
+    def open_titles_file(self):
+        try:
+            if os.path.exists(self.titles_file):
+                os.system(f"open {self.titles_file}")
+            else:
+                messagebox.showwarning("Warning", "titles.txt file does not exist yet.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open titles file: {str(e)}")
     
     def check_live_status(self):
         try:
