@@ -116,7 +116,7 @@ class YouTubeUpdaterCore:
         print(f"Status: {message} ({status_type})")  # Add logging for debugging
     
     def setup_youtube(self) -> None:
-        """Set up YouTube API client."""
+        """Set up YouTube API and get initial state."""
         try:
             if not os.path.exists(self.client_secrets_path):
                 self._set_status(
@@ -133,7 +133,7 @@ class YouTubeUpdaterCore:
             
             self.youtube = build("youtube", "v3", credentials=creds)
             
-            # Get the channel ID
+            # Get the channel ID and current live stream title
             request = self.youtube.channels().list(
                 part="id",
                 mine=True
@@ -142,7 +142,22 @@ class YouTubeUpdaterCore:
             
             if response["items"]:
                 self.channel_id = response["items"][0]["id"]
-                self._set_status("Connected to YouTube API", "success")
+                # Get current live stream title
+                live_request = self.youtube.search().list(
+                    part="snippet",
+                    channelId=self.channel_id,
+                    eventType="live",
+                    type="video"
+                )
+                live_response = live_request.execute()
+                if live_response.get("items"):
+                    self.is_live = True
+                    self.current_title = live_response["items"][0]["snippet"]["title"]
+                    self._set_status("Connected to YouTube API", "success")
+                else:
+                    self.is_live = False
+                    self.current_title = "Not Live"
+                    self._set_status("Connected to YouTube API (not streaming)", "info")
             else:
                 self._set_status("Could not retrieve channel ID", "error")
         
@@ -290,6 +305,7 @@ class YouTubeUpdaterCore:
                 self._set_status("Channel is live", "success")
             else:
                 self.is_live = False
+                self.current_title = "Not Live"
                 self._set_status("Channel is not live", "info")
         
         except Exception as e:
@@ -320,10 +336,9 @@ class YouTubeUpdaterCore:
                 return
             
             video_id = response["items"][0]["id"]["videoId"]
-            current_title = response["items"][0]["snippet"]["title"]
             
-            # Only update if the title is different
-            if current_title != self.next_title:
+            # Only update if the title is different from what we want to set
+            if self.current_title != self.next_title:
                 # Update the video title
                 request = self.youtube.videos().update(
                     part="snippet",
@@ -344,7 +359,13 @@ class YouTubeUpdaterCore:
                 
                 # Archive the old title and move to next
                 self._archive_title(self.next_title)
+                
+                # Update the current title to what we just set
+                self.current_title = self.next_title
+                
+                # Rotate to the next title
                 self._rotate_titles()
+                
                 self._set_status(f"Title updated to: {self.next_title}", "success")
             else:
                 self._set_status("Title is already up to date", "info")
