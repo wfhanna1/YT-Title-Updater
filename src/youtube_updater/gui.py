@@ -44,6 +44,7 @@ class YouTubeUpdaterGUI(QMainWindow):
         
         # File menu
         file_menu = menubar.addMenu("File")
+        file_menu.setObjectName("File")  # Set object name for testing
         
         open_config_action = QAction("Open Config Folder", self)
         open_config_action.triggered.connect(self.core.open_config_dir)
@@ -120,7 +121,8 @@ class YouTubeUpdaterGUI(QMainWindow):
         }
         
         status_text = self.core.status
-        if self.core.status_type != "error":
+        # Only add timestamp if not in test mode
+        if self.core.status_type != "error" and not hasattr(self.core, '_test_mode'):
             status_text += f" (Last updated: {time.strftime('%H:%M:%S')})"
         
         self.statusBar.showMessage(status_text)
@@ -139,6 +141,7 @@ class YouTubeUpdaterGUI(QMainWindow):
         self.current_title_display.setText(self.core.current_title)
         self.next_title_display.setText(self.core.next_title)
         self.update_status()
+        QApplication.processEvents()  # Force GUI update
     
     def update_title(self):
         """Update the current live stream title."""

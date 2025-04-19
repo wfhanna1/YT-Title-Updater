@@ -245,9 +245,6 @@ class YouTubeUpdaterCore:
             title: The title to archive
         """
         try:
-            # Add the title to applied-titles.txt with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
             # Remove the title from titles.txt
             if os.path.exists(self.titles_file):
                 with open(self.titles_file, "r") as f:
@@ -258,17 +255,26 @@ class YouTubeUpdaterCore:
                     
                     with open(self.titles_file, "w") as f:
                         f.write("\n".join(titles) + "\n")
+                else:
+                    raise ValueError(f"Title '{title}' not found in titles file")
             
-            # Add to applied titles
+            # Add the title to applied-titles.txt with timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open(self.applied_titles_file, "a") as f:
                 f.write(f"{timestamp} - {title}\n")
             
-            # Log the change
+            # Log to history
             with open(self.history_log, "a") as f:
                 f.write(f"{timestamp} - Title updated: {title}\n")
             
+            self._set_status(f"Title updated: {title}", "success")
+            
+        except ValueError as e:
+            self._set_status(f"Error archiving title: {str(e)}", "error")
+            raise
         except Exception as e:
             self._set_status(f"Error archiving title: {str(e)}", "error")
+            raise
     
     def check_live_status(self) -> None:
         """Check if the channel is currently live streaming."""
@@ -299,20 +305,20 @@ class YouTubeUpdaterCore:
     
     def update_title(self) -> None:
         """Update the current live stream title."""
+        if not self.youtube:
+            self._set_status("YouTube client not initialized", "error")
+            return
+        
+        if not self.is_live:
+            self._set_status("No live stream found", "error")
+            return
+        
+        if not self.next_title:
+            self._set_status("No title available to update", "error")
+            return
+        
         try:
-            if not self.youtube or not self.channel_id:
-                self._set_status("YouTube API not initialized", "error")
-                return
-            
-            if not self.is_live:
-                self._set_status("Cannot update title: Channel is not live", "warning")
-                return
-            
-            if not self.titles:
-                self._set_status("No titles available to update", "warning")
-                return
-            
-            # Get the current live video ID
+            # Get the current live stream
             request = self.youtube.search().list(
                 part="snippet",
                 channelId=self.channel_id,
@@ -322,12 +328,12 @@ class YouTubeUpdaterCore:
             response = request.execute()
             
             if not response.get("items"):
-                self._set_status("Could not find live video", "error")
+                self._set_status("No live stream found", "error")
                 return
             
             video_id = response["items"][0]["id"]["videoId"]
             
-            # Get the video details to get the category ID
+            # Get the video details to preserve other fields
             video_request = self.youtube.videos().list(
                 part="snippet",
                 id=video_id
@@ -335,30 +341,41 @@ class YouTubeUpdaterCore:
             video_response = video_request.execute()
             
             if not video_response.get("items"):
-                self._set_status("Could not get video details", "error")
+                self._set_status("Could not retrieve video details", "error")
                 return
-                
-            current_snippet = video_response["items"][0]["snippet"]
             
-            # Update the video title while preserving other snippet fields
-            current_snippet["title"] = self.next_title
+            # Update the title
+            snippet = video_response["items"][0]["snippet"]
+            snippet["title"] = self.next_title
             
-            # Update the video title
-            request = self.youtube.videos().update(
+            update_request = self.youtube.videos().update(
                 part="snippet",
                 body={
                     "id": video_id,
-                    "snippet": current_snippet
+                    "snippet": snippet
                 }
             )
-            request.execute()
+            update_request.execute()
             
-            # Archive the old title and rotate to next title
-            self._archive_title(self.next_title)
-            self._rotate_titles()
+            # Log the update
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(self.history_log, "a") as f:
+                f.write(f"{timestamp} - Title updated: {self.next_title}\n")
             
-            self._set_status("Title updated successfully", "success")
-        
+            # Update the current title
+            self.current_title = self.next_title
+            
+            # Archive the title and rotate to next
+            try:
+                self._archive_title(self.next_title)
+                self._rotate_titles()
+            except Exception as e:
+                # Log the error but don't fail the update
+                self._set_status(f"Title updated but error archiving: {str(e)}", "warning")
+                return
+            
+            self._set_status(f"Title updated to: {self.next_title}", "success")
+            
         except Exception as e:
             self._set_status(f"Error updating title: {str(e)}", "error")
     
