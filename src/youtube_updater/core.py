@@ -38,8 +38,12 @@ class YouTubeUpdaterCore:
         
         # Check for client secrets file
         if not os.path.exists(self.client_secrets_path):
+            local_dev_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "client_secrets.json")
+            config_path = os.path.join(self.config_dir, "client_secrets.json")
             self._set_status(
-                f"Client secrets file not found. Please copy it to: {self.client_secrets_path}",
+                f"Client secrets file not found. Please place it in either:\n"
+                f"1. Local development: {local_dev_path}\n"
+                f"2. Deployed location: {config_path}",
                 "error"
             )
             return
@@ -80,7 +84,32 @@ class YouTubeUpdaterCore:
         self.titles_file = os.path.join(self.config_dir, "titles.txt")
         self.applied_titles_file = os.path.join(self.config_dir, "applied-titles.txt")
         self.token_path = os.path.join(self.config_dir, "token.pickle")
-        self.client_secrets_path = os.path.join(self.config_dir, "client_secrets.json")
+        
+        # Try multiple possible locations for client_secrets.json
+        possible_paths = [
+            # Local development path (when running from root)
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "client_secrets.json"),
+            # Local development path (when running from macos-app)
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "client_secrets.json"),
+            # Deployed path
+            os.path.join(self.config_dir, "client_secrets.json")
+        ]
+        
+        print(f"Looking for client_secrets.json in:")
+        for path in possible_paths:
+            print(f"- {path} ({'exists' if os.path.exists(path) else 'does not exist'})")
+        
+        # Try each path in order
+        for path in possible_paths:
+            if os.path.exists(path):
+                self.client_secrets_path = path
+                print(f"Using client_secrets.json from: {path}")
+                break
+        else:
+            # If no path was found, use the deployed path
+            self.client_secrets_path = possible_paths[-1]
+            print(f"No client_secrets.json found, will use: {self.client_secrets_path}")
+            
         self.history_log = os.path.join(self.config_dir, "history.log")
         
         # Ensure required files exist
@@ -126,21 +155,33 @@ class YouTubeUpdaterCore:
     def setup_youtube(self) -> None:
         """Set up YouTube API and get initial state."""
         try:
+            print(f"Attempting to initialize YouTube API with client_secrets.json from: {self.client_secrets_path}")
+            
             if not os.path.exists(self.client_secrets_path):
                 self._set_status(
-                    f"Client secrets file not found. Please copy it to: {self.client_secrets_path}",
+                    f"Client secrets file not found at: {self.client_secrets_path}\n"
+                    f"Please ensure the file exists in one of these locations:\n"
+                    f"1. Project root directory\n"
+                    f"2. {os.path.join(self.config_dir, 'client_secrets.json')}",
                     "error"
                 )
                 return
             
+            print("Loading credentials...")
             creds = self._load_credentials()
             if not creds or not creds.valid:
+                print("No valid credentials found, attempting to authenticate...")
                 creds = self._refresh_or_authenticate(creds)
                 if not creds:
+                    self._set_status("Failed to authenticate with YouTube API", "error")
                     return
+            else:
+                print("Using existing valid credentials")
             
+            print("Building YouTube API client...")
             self.youtube = build("youtube", "v3", credentials=creds)
             
+            print("Fetching channel information...")
             # Get the channel ID and current live stream title
             request = self.youtube.channels().list(
                 part="id",
@@ -150,6 +191,8 @@ class YouTubeUpdaterCore:
             
             if response["items"]:
                 self.channel_id = response["items"][0]["id"]
+                print(f"Found channel ID: {self.channel_id}")
+                
                 # Get current live stream title
                 live_request = self.youtube.search().list(
                     part="snippet",
@@ -161,16 +204,17 @@ class YouTubeUpdaterCore:
                 if live_response.get("items"):
                     self.is_live = True
                     self.current_title = live_response["items"][0]["snippet"]["title"]
-                    self._set_status("Connected to YouTube API", "success")
+                    self._set_status("YouTube API initialized successfully", "success")
                 else:
                     self.is_live = False
                     self.current_title = "Not Live"
-                    self._set_status("Connected to YouTube API (not streaming)", "info")
+                    self._set_status("YouTube API initialized (not streaming)", "info")
             else:
-                self._set_status("Could not retrieve channel ID", "error")
-        
+                self._set_status("Could not retrieve channel information", "error")
+                
         except Exception as e:
-            self._set_status(f"Error connecting to YouTube API: {str(e)}", "error")
+            print(f"Error during YouTube API initialization: {str(e)}")
+            self._set_status(f"Error initializing YouTube API: {str(e)}", "error")
     
     def _load_credentials(self) -> Optional[Credentials]:
         """Load credentials from token file if it exists.
@@ -283,11 +327,13 @@ class YouTubeUpdaterCore:
                 self._set_status("YouTube API not initialized", "error")
                 return
             
+            # Only make one API call that includes both the live status and title
             request = self.youtube.search().list(
                 part="snippet",
                 channelId=self.channel_id,
                 eventType="live",
-                type="video"
+                type="video",
+                maxResults=1  # Only need one result
             )
             response = request.execute()
             
@@ -301,6 +347,7 @@ class YouTubeUpdaterCore:
                 self._set_status("Channel is not live", "info")
         
         except Exception as e:
+            print(f"Error checking live status: {str(e)}")
             self._set_status(f"Error checking live status: {str(e)}", "error")
     
     def update_title(self) -> None:
