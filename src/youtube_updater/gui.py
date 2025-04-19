@@ -30,12 +30,7 @@ class YouTubeUpdaterGUI(QMainWindow):
         self.create_main_widget()
         self.create_status_bar()
         
-        # Set up update timer
-        self.update_timer = QTimer()
-        self.update_timer.timeout.connect(self.check_status)
-        self.update_timer.start(30000)  # Update every 30 seconds
-        
-        # Initial update
+        # Initial status check
         self.check_status()
     
     def create_menu(self):
@@ -56,9 +51,9 @@ class YouTubeUpdaterGUI(QMainWindow):
         
         file_menu.addSeparator()
         
-        check_now_action = QAction("Check Now", self)
-        check_now_action.triggered.connect(self.check_status)
-        file_menu.addAction(check_now_action)
+        refresh_action = QAction("Refresh Status", self)
+        refresh_action.triggered.connect(self.check_status)
+        file_menu.addAction(refresh_action)
         
         file_menu.addSeparator()
         
@@ -121,9 +116,11 @@ class YouTubeUpdaterGUI(QMainWindow):
         }
         
         status_text = self.core.status
-        # Only add timestamp if not in test mode
+        # Only add timestamp if not in test mode and not an error
         if self.core.status_type != "error" and not hasattr(self.core, '_test_mode'):
-            status_text += f" (Last updated: {time.strftime('%H:%M:%S')})"
+            status_text += f" (Last checked: {time.strftime('%H:%M:%S')})"
+            if self.core.status_type == "success":
+                status_text += " - Click 'Update Title' to change title or 'Refresh Status' to check again"
         
         self.statusBar.showMessage(status_text)
         
