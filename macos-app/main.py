@@ -23,11 +23,11 @@ if __name__ == "__main__":
         application_path = Path(sys._MEIPASS)
     else:
         # If the application is run as a script
-        application_path = Path(__file__).parent
+        application_path = project_root  # Use project root instead of macos-app directory
     
     # Create and run the application
     app = QApplication([])
-    core = YouTubeUpdaterCore(config_dir=application_path)
+    core = YouTubeUpdaterCore(config_dir=str(application_path))  # Convert Path to string
     window = YouTubeUpdaterGUI(core=core)
     window.show()
     app.exec() 

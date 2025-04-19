@@ -57,7 +57,7 @@ class YouTubeUpdaterCore:
         if sys.platform == "win32":
             return os.path.join(os.getenv("APPDATA"), self.DEFAULT_CONFIG_DIR)
         elif sys.platform == "darwin":
-            return os.path.join(os.path.expanduser("~"), "Library", "Application Support", self.DEFAULT_CONFIG_DIR)
+            return os.path.join(os.path.expanduser("~"), "Documents", self.DEFAULT_CONFIG_DIR)
         else:
             return os.path.join(os.path.expanduser("~"), ".config", self.DEFAULT_CONFIG_DIR)
     
@@ -327,15 +327,28 @@ class YouTubeUpdaterCore:
             
             video_id = response["items"][0]["id"]["videoId"]
             
+            # Get the video details to get the category ID
+            video_request = self.youtube.videos().list(
+                part="snippet",
+                id=video_id
+            )
+            video_response = video_request.execute()
+            
+            if not video_response.get("items"):
+                self._set_status("Could not get video details", "error")
+                return
+                
+            current_snippet = video_response["items"][0]["snippet"]
+            
+            # Update the video title while preserving other snippet fields
+            current_snippet["title"] = self.next_title
+            
             # Update the video title
             request = self.youtube.videos().update(
                 part="snippet",
                 body={
                     "id": video_id,
-                    "snippet": {
-                        "title": self.next_title,
-                        "categoryId": response["items"][0]["snippet"]["categoryId"]
-                    }
+                    "snippet": current_snippet
                 }
             )
             request.execute()
