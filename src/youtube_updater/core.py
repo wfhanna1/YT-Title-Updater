@@ -122,8 +122,8 @@ class YouTubeUpdaterCore:
         """Initialize the application state."""
         self.youtube = None
         self.current_title = "Not Live"
-        self.next_title = "No titles available"
-        self.titles: List[str] = []
+        self.next_title = "Live Stream"  # Set default next title
+        self.titles: List[str] = ["Live Stream"]  # Initialize with default title
         self._status = "Initializing"
         self._status_type = "info"
         self.is_live = False
@@ -270,17 +270,49 @@ class YouTubeUpdaterCore:
     
     def _load_existing_titles(self) -> None:
         """Load titles from existing titles file."""
-        with open(self.titles_file, "r") as f:
-            self.titles = [line.strip() for line in f if line.strip()]
-            if self.titles:
-                self.next_title = self.titles[0]
+        try:
+            # Check if file exists and is empty
+            if not os.path.exists(self.titles_file) or os.path.getsize(self.titles_file) == 0:
+                self.titles = ["Live Stream"]
+                self.next_title = "Live Stream"
+                with open(self.titles_file, "w") as f:
+                    f.write("Live Stream\n")
+                return
+
+            with open(self.titles_file, "r") as f:
+                content = f.read().strip()
+                if not content:
+                    self.titles = ["Live Stream"]
+                    self.next_title = "Live Stream"
+                    with open(self.titles_file, "w") as f:
+                        f.write("Live Stream\n")
+                    return
+
+                self.titles = [line.strip() for line in content.split('\n') if line.strip()]
+                if not self.titles:
+                    self.titles = ["Live Stream"]
+                    self.next_title = "Live Stream"
+                    with open(self.titles_file, "w") as f:
+                        f.write("Live Stream\n")
+                else:
+                    self.next_title = self.titles[0]
+                    if self.next_title == "No titles available":
+                        self.next_title = "Live Stream"
+                        self.titles = ["Live Stream"]
+                        with open(self.titles_file, "w") as f:
+                            f.write("Live Stream\n")
+        except Exception:
+            self.titles = ["Live Stream"]
+            self.next_title = "Live Stream"
+            with open(self.titles_file, "w") as f:
+                f.write("Live Stream\n")
     
     def _create_default_titles_file(self) -> None:
         """Create titles file with default title."""
-        self.titles = [self.DEFAULT_TITLE]
-        self.next_title = self.titles[0]
+        self.titles = ["Live Stream"]
+        self.next_title = "Live Stream"
         with open(self.titles_file, "w") as f:
-            f.write(f"{self.DEFAULT_TITLE}\n")
+            f.write("Live Stream\n")
     
     def _archive_title(self, title: str) -> None:
         """Archive a title that has been successfully applied to the stream.
@@ -289,7 +321,7 @@ class YouTubeUpdaterCore:
             title: The title to archive
         """
         try:
-            # Remove the title from titles.txt
+            # Remove the title from titles.txt if it exists
             if os.path.exists(self.titles_file):
                 with open(self.titles_file, "r") as f:
                     titles = [line.strip() for line in f if line.strip()]
@@ -299,8 +331,6 @@ class YouTubeUpdaterCore:
                     
                     with open(self.titles_file, "w") as f:
                         f.write("\n".join(titles) + "\n")
-                else:
-                    raise ValueError(f"Title '{title}' not found in titles file")
             
             # Add the title to applied-titles.txt with timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -311,11 +341,8 @@ class YouTubeUpdaterCore:
             with open(self.history_log, "a") as f:
                 f.write(f"{timestamp} - Title updated: {title}\n")
             
-            self._set_status(f"Title updated: {title}", "success")
+            self._set_status(f"Title archived: {title}", "success")
             
-        except ValueError as e:
-            self._set_status(f"Error archiving title: {str(e)}", "error")
-            raise
         except Exception as e:
             self._set_status(f"Error archiving title: {str(e)}", "error")
             raise
@@ -350,6 +377,28 @@ class YouTubeUpdaterCore:
             print(f"Error checking live status: {str(e)}")
             self._set_status(f"Error checking live status: {str(e)}", "error")
     
+    def _rotate_titles(self) -> None:
+        """Rotate to the next title in the list."""
+        if not self.titles:
+            self.titles = ["Live Stream"]
+            self.next_title = "Live Stream"
+            with open(self.titles_file, "w") as f:
+                f.write("Live Stream\n")
+            return None
+            
+        # Store the current title before rotation
+        current = self.titles[0]
+        # Rotate the list
+        self.titles.append(self.titles.pop(0))
+        # Update next_title to the new first title
+        self.next_title = self.titles[0]
+        if self.next_title == "No titles available":
+            self.next_title = "Live Stream"
+            self.titles = ["Live Stream"]
+            with open(self.titles_file, "w") as f:
+                f.write("Live Stream\n")
+        return current
+    
     def update_title(self) -> None:
         """Update the current live stream title."""
         if not self.youtube:
@@ -360,10 +409,20 @@ class YouTubeUpdaterCore:
             self._set_status("No live stream found", "error")
             return
         
-        if not self.next_title:
-            self._set_status("No title available to update", "error")
-            return
-        
+        # Check if titles file is empty
+        if not os.path.exists(self.titles_file) or os.path.getsize(self.titles_file) == 0:
+            self.next_title = "Live Stream"
+            self.titles = ["Live Stream"]
+            with open(self.titles_file, "w") as f:
+                f.write("Live Stream\n")
+            self._set_status("Titles file empty, using default: Live Stream", "warning")
+        elif not self.next_title or not self.titles or self.next_title == "No titles available":
+            self.next_title = "Live Stream"
+            self.titles = ["Live Stream"]
+            with open(self.titles_file, "w") as f:
+                f.write("Live Stream\n")
+            self._set_status("No title available, using default: Live Stream", "warning")
+
         try:
             # Get the current live stream
             request = self.youtube.search().list(
@@ -409,13 +468,22 @@ class YouTubeUpdaterCore:
             with open(self.history_log, "a") as f:
                 f.write(f"{timestamp} - Title updated: {self.next_title}\n")
             
+            # Store the title we just used
+            used_title = self.next_title
+            
             # Update the current title
             self.current_title = self.next_title
             
             # Archive the title and rotate to next
             try:
-                self._archive_title(self.next_title)
+                # First archive the title
+                self._archive_title(used_title)
+                # Then rotate to the next title
                 self._rotate_titles()
+                # Update next_title to the new first title
+                if not self.titles:
+                    self.titles = ["Live Stream"]
+                self.next_title = self.titles[0]
             except Exception as e:
                 # Log the error but don't fail the update
                 self._set_status(f"Title updated but error archiving: {str(e)}", "warning")
@@ -425,12 +493,6 @@ class YouTubeUpdaterCore:
             
         except Exception as e:
             self._set_status(f"Error updating title: {str(e)}", "error")
-    
-    def _rotate_titles(self) -> None:
-        """Rotate to the next title in the list."""
-        if self.titles:
-            self.titles.append(self.titles.pop(0))
-            self.next_title = self.titles[0]
     
     def open_config_dir(self) -> None:
         """Open the configuration directory in the system's file explorer."""
