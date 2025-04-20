@@ -4,8 +4,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 SCOPES = ["https://www.googleapis.com/auth/youtube"]
-TOKEN_PATH = os.path.expanduser("~/Documents/yt_title_updater/token.pickle")
-SECRETS_PATH = os.path.expanduser("~/Documents/yt_title_updater/client_secrets.json")
+TOKEN_PATH = os.path.expanduser("~/Library/Application Support/yt_title_updater/token.pickle")
+SECRETS_PATH = os.path.expanduser("~/Library/Application Support/yt_title_updater/client_secrets.json")
 
 def authenticate():
     creds = None
