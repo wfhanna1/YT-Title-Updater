@@ -1,3 +1,3 @@
 #!/bin/bash
-source venv/bin/activate
-./venv/bin/python macos-app/main.py 
+cd ~/Code/YT-Title-Updater
+python3 youtube_title_updater.py
