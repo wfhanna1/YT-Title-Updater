@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Protocol
 from google.oauth2.credentials import Credentials
 
 class IYouTubeClient(ABC):
@@ -67,4 +67,15 @@ class IConfigManager(ABC):
     @abstractmethod
     def get_client_secrets_path(self) -> str:
         """Get the path to the client secrets file."""
+        pass
+
+class ITitleGenerator(Protocol):
+    """Interface for title generation strategies."""
+    
+    def generate_title(self) -> str:
+        """Generate a title based on the strategy.
+        
+        Returns:
+            str: Generated title
+        """
         pass 

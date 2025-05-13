@@ -2,11 +2,12 @@ import os
 from typing import List, Optional
 from datetime import datetime
 from ..exceptions.custom_exceptions import TitleManagerError
+from .interfaces import ITitleManager
+from .default_title_generator import DefaultTitleGenerator
+from ..utils.file_operations import FileOperations
 
-class TitleManager:
+class TitleManager(ITitleManager):
     """Manages YouTube video titles."""
-    
-    DEFAULT_TITLE = "Live Stream"
     
     def __init__(self, titles_file: str, applied_titles_file: str, history_log: str):
         """Initialize the title manager.
@@ -19,8 +20,10 @@ class TitleManager:
         self.titles_file = titles_file
         self.applied_titles_file = applied_titles_file
         self.history_log = history_log
+        self.file_ops = FileOperations()
+        self.default_generator = DefaultTitleGenerator()
         self.titles: List[str] = []
-        self.next_title: str = self.DEFAULT_TITLE
+        self.next_title: Optional[str] = None
         
         # Create files if they don't exist
         self._ensure_files_exist()
@@ -43,41 +46,38 @@ class TitleManager:
             if os.path.exists(self.titles_file):
                 with open(self.titles_file, "r") as f:
                     self.titles = [line.strip() for line in f if line.strip()]
-                    if self.titles:
-                        self.next_title = self.titles[0]
-                    else:
-                        self._create_default_titles()
+                    self.next_title = self.titles[0] if self.titles else None
             else:
-                self._create_default_titles()
-                
+                self.titles = []
+                self.next_title = None
         except Exception as e:
             raise TitleManagerError(f"Error loading titles: {str(e)}")
     
-    def _create_default_titles(self) -> None:
-        """Create titles file with default title."""
-        self.titles = [self.DEFAULT_TITLE]
-        self.next_title = self.DEFAULT_TITLE
-        with open(self.titles_file, "w") as f:
-            f.write(f"{self.DEFAULT_TITLE}\n")
-    
-    def get_next_title(self) -> str:
+    def get_next_title(self) -> Optional[str]:
         """Get the next title in the rotation.
         
         Returns:
-            str: Next title to use
+            Optional[str]: Next title to use, or None if no titles available
         """
-        return self.next_title
+        titles = self.file_ops.read_lines(self.titles_file)
+        if not titles:
+            return self.default_generator.generate_title()
+        
+        # Get the first title and move it to the end
+        next_title = titles[0]
+        titles = titles[1:] + [next_title]
+        self.file_ops.write_lines(self.titles_file, titles)
+        return next_title
     
-    def rotate_titles(self) -> str:
+    def rotate_titles(self) -> Optional[str]:
         """Rotate to the next title in the list.
         
         Returns:
-            str: The title that was just used
+            Optional[str]: The title that was just used, or None if no titles available
         """
         if not self.titles:
-            self._create_default_titles()
-            return self.DEFAULT_TITLE
-            
+            self.next_title = None
+            return None
         # Store the current title before rotation
         current = self.titles[0]
         
@@ -94,48 +94,20 @@ class TitleManager:
         return current
     
     def archive_title(self, title: str) -> None:
-        """Archive a title that has been used.
+        """Archive a used title.
         
         Args:
             title: Title to archive
-            
-        Raises:
-            TitleManagerError: If archiving fails
         """
-        try:
-            # Add to applied titles file
-            with open(self.applied_titles_file, "a") as f:
-                f.write(f"{title}\n")
-            
-            # Add to history log with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(self.history_log, "a") as f:
-                f.write(f"{timestamp}: {title}\n")
-            
-            # Remove from titles list if it exists
-            if title in self.titles:
-                self.titles.remove(title)
-                # Update titles file
-                with open(self.titles_file, "w") as f:
-                    f.write("\n".join(self.titles) + "\n" if self.titles else "")
-                    
-        except Exception as e:
-            raise TitleManagerError(f"Error archiving title: {str(e)}")
+        self.file_ops.append_line(self.applied_titles_file, title)
+        self.file_ops.append_line(self.history_log, f"{title} - {self.file_ops.get_current_time()}")
     
     def add_title(self, title: str) -> None:
         """Add a new title to the list.
         
         Args:
             title: Title to add
-            
-        Raises:
-            TitleManagerError: If adding title fails
         """
-        try:
-            if title not in self.titles:
-                self.titles.append(title)
-                with open(self.titles_file, "a") as f:
-                    f.write(f"{title}\n")
-                    
-        except Exception as e:
-            raise TitleManagerError(f"Error adding title: {str(e)}") 
+        titles = self.file_ops.read_lines(self.titles_file)
+        titles.append(title)
+        self.file_ops.write_lines(self.titles_file, titles) 

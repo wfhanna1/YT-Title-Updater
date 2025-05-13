@@ -4,6 +4,7 @@ google-auth-httplib2>=0.1.0
 PyQt6>=6.4.0
 urllib3>=2.0.0
 py2app
+pytz>=2023.3
 
 # Development dependencies
 pytest>=7.0.0
