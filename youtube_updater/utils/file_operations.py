@@ -1,6 +1,7 @@
 import os
 from typing import List, Optional
 from pathlib import Path
+from datetime import datetime
 
 class FileOperations:
     """Handles all file operations for the application."""
@@ -58,4 +59,13 @@ class FileOperations:
         Args:
             directory: Path to the directory
         """
-        os.makedirs(directory, exist_ok=True) 
+        os.makedirs(directory, exist_ok=True)
+    
+    @staticmethod
+    def get_current_time() -> str:
+        """Get the current timestamp as a string.
+        
+        Returns:
+            str: Current timestamp in YYYY-MM-DD HH:MM:SS format
+        """
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
