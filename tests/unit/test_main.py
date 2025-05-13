@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 import argparse
 import logging
 from pathlib import Path
+from youtube_updater.gui import YouTubeUpdaterGUI
 
 # Import the main module
 sys.path.append('.')  # Ensure we can import from the root directory

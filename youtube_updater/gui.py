@@ -81,7 +81,8 @@ class YouTubeUpdaterGUI(QMainWindow):
         next_title_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.layout.addWidget(next_title_header)
         
-        self.next_title_display = QLabel(self.core.next_title)
+        next_title_text = self.core.next_title if self.core.next_title else "No titles available"
+        self.next_title_display = QLabel(next_title_text)
         self.next_title_display.setFont(QFont("Arial", 12))
         self.next_title_display.setWordWrap(True)
         self.layout.addWidget(self.next_title_display)
@@ -128,7 +129,8 @@ class YouTubeUpdaterGUI(QMainWindow):
     def update_display(self):
         """Update the display with current information."""
         self.current_title_display.setText(self.core.current_title)
-        self.next_title_display.setText(self.core.next_title)
+        next_title_text = self.core.next_title if self.core.next_title else "No titles available"
+        self.next_title_display.setText(next_title_text)
         self.update_status()
     
     def check_status(self):

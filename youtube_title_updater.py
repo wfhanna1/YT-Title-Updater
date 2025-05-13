@@ -7,7 +7,7 @@ A GUI application for automatically updating YouTube live stream titles.
 
 import sys
 from PyQt6.QtWidgets import QApplication
-from youtube_updater import YouTubeUpdaterGUI
+from youtube_updater.gui import YouTubeUpdaterGUI
 
 def main():
     """Launch the YouTube Title Updater application."""
