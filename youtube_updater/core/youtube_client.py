@@ -54,24 +54,39 @@ class YouTubeClient(IYouTubeClient):
             self.get_channel_id()
             
         try:
-            request = self.youtube.search().list(
-                part="snippet",
-                channelId=self.channel_id,
-                eventType="live",
-                type="video",
-                maxResults=1
+            # First try to get active broadcasts
+            request = self.youtube.liveBroadcasts().list(
+                part="snippet,status",
+                broadcastStatus="active",
+                mine=True
             )
             response = request.execute()
             
-            if not response.get("items"):
-                return {"is_live": False}
-                
-            video = response["items"][0]
-            return {
-                "is_live": True,
-                "video_id": video["id"]["videoId"],
-                "title": video["snippet"]["title"]
-            }
+            if response.get("items"):
+                broadcast = response["items"][0]
+                return {
+                    "is_live": True,
+                    "video_id": broadcast["id"],
+                    "title": broadcast["snippet"]["title"]
+                }
+            
+            # If no active broadcasts, check for upcoming broadcasts
+            request = self.youtube.liveBroadcasts().list(
+                part="snippet,status",
+                broadcastStatus="upcoming",
+                mine=True
+            )
+            response = request.execute()
+            
+            if response.get("items"):
+                broadcast = response["items"][0]
+                return {
+                    "is_live": True,
+                    "video_id": broadcast["id"],
+                    "title": broadcast["snippet"]["title"]
+                }
+            
+            return {"is_live": False}
             
         except Exception as e:
             raise YouTubeAPIError(f"Error getting live stream info: {str(e)}")
