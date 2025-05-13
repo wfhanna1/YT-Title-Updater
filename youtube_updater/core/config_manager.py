@@ -40,6 +40,11 @@ class ConfigManager:
             str: Path to the configuration directory
         """
         if config_dir is None:
+            # First check current directory
+            current_dir = os.getcwd()
+            if os.path.exists(os.path.join(current_dir, "client_secrets.json")):
+                return current_dir
+            # Fall back to platform-specific directory
             config_dir = self._get_platform_config_dir()
         os.makedirs(config_dir, exist_ok=True)
         return config_dir
