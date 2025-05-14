@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from .core import YouTubeUpdaterCore
+from .core.factory import ComponentFactory
 from pathlib import Path
 from typing import Optional, Union
 
@@ -24,7 +25,7 @@ class YouTubeUpdaterGUI(QMainWindow):
         self.setGeometry(100, 100, 600, 400)
         
         # Initialize core functionality
-        self.core = core if core is not None else YouTubeUpdaterCore()
+        self.core = core if core is not None else ComponentFactory.create_core()
         
         # Create central widget and layout
         central_widget = QWidget()
@@ -80,7 +81,8 @@ class YouTubeUpdaterGUI(QMainWindow):
         next_title_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.layout.addWidget(next_title_header)
         
-        self.next_title_display = QLabel(self.core.next_title)
+        next_title_text = self.core.next_title if self.core.next_title else "No titles available"
+        self.next_title_display = QLabel(next_title_text)
         self.next_title_display.setFont(QFont("Arial", 12))
         self.next_title_display.setWordWrap(True)
         self.layout.addWidget(self.next_title_display)
@@ -127,7 +129,8 @@ class YouTubeUpdaterGUI(QMainWindow):
     def update_display(self):
         """Update the display with current information."""
         self.current_title_display.setText(self.core.current_title)
-        self.next_title_display.setText(self.core.next_title)
+        next_title_text = self.core.next_title if self.core.next_title else "No titles available"
+        self.next_title_display.setText(next_title_text)
         self.update_status()
     
     def check_status(self):
@@ -150,7 +153,7 @@ def main(config_dir: Optional[Union[str, Path]] = None):
                    Can be a string path or Path object.
     """
     app = QApplication([])
-    core = YouTubeUpdaterCore(config_dir=config_dir)
+    core = ComponentFactory.create_core(str(config_dir) if config_dir else None)
     window = YouTubeUpdaterGUI(core=core)
     window.show()
     app.exec() 
