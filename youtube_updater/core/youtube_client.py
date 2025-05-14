@@ -54,26 +54,10 @@ class YouTubeClient(IYouTubeClient):
             self.get_channel_id()
             
         try:
-            # First try to get active broadcasts
+            # Get active broadcasts only
             request = self.youtube.liveBroadcasts().list(
                 part="snippet,status",
                 broadcastStatus="active"
-            )
-            response = request.execute()
-            
-            # Filter for our channel's broadcasts
-            for broadcast in response.get("items", []):
-                if broadcast["snippet"]["channelId"] == self.channel_id:
-                    return {
-                        "is_live": True,
-                        "video_id": broadcast["id"],
-                        "title": broadcast["snippet"]["title"]
-                    }
-            
-            # If no active broadcasts, check for upcoming broadcasts
-            request = self.youtube.liveBroadcasts().list(
-                part="snippet,status",
-                broadcastStatus="upcoming"
             )
             response = request.execute()
             
