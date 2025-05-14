@@ -69,6 +69,34 @@ class IConfigManager(ABC):
         """Get the path to the client secrets file."""
         pass
 
+class IFileOperations(ABC):
+    """Interface for file operations."""
+    
+    @abstractmethod
+    def ensure_file_exists(self, file_path: str, default_content: str = "") -> None:
+        """Ensure a file exists, create it with default content if it doesn't."""
+        pass
+    
+    @abstractmethod
+    def read_lines(self, file_path: str) -> List[str]:
+        """Read lines from a file."""
+        pass
+    
+    @abstractmethod
+    def write_lines(self, file_path: str, lines: List[str]) -> None:
+        """Write lines to a file."""
+        pass
+    
+    @abstractmethod
+    def append_line(self, file_path: str, line: str) -> None:
+        """Append a line to a file."""
+        pass
+    
+    @abstractmethod
+    def get_current_time(self) -> str:
+        """Get the current time in a formatted string."""
+        pass
+
 class ITitleGenerator(Protocol):
     """Interface for title generation strategies."""
     

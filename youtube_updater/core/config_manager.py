@@ -1,53 +1,35 @@
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Optional
+from ..utils.file_operations import FileOperations
 
 class ConfigManager:
     """Manages application configuration and file paths."""
     
-    DEFAULT_CONFIG_DIR = "yt_title_updater"
-    
     def __init__(self, config_dir: Optional[str] = None):
-        """Initialize the configuration manager.
+        """Initialize the config manager.
         
         Args:
             config_dir: Optional custom config directory path
         """
-        self.config_dir = self._setup_config_dir(config_dir)
-        self._setup_file_paths()
-    
-    def _get_platform_config_dir(self) -> str:
-        """Get the platform-specific configuration directory.
-        
-        Returns:
-            str: Path to the configuration directory
-        """
-        if sys.platform == "win32":
-            return os.path.join(os.getenv("APPDATA"), self.DEFAULT_CONFIG_DIR)
-        elif sys.platform == "darwin":
-            return os.path.join(os.path.expanduser("~"), "Library", "Application Support", self.DEFAULT_CONFIG_DIR)
+        # Get the application root directory (where the executable is)
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            self.app_root = Path(sys._MEIPASS)
         else:
-            return os.path.join(os.path.expanduser("~"), ".config", self.DEFAULT_CONFIG_DIR)
-    
-    def _setup_config_dir(self, config_dir: Optional[str]) -> str:
-        """Set up the configuration directory.
+            # Running as script
+            self.app_root = Path(__file__).parent.parent.parent
         
-        Args:
-            config_dir: Optional custom config directory path
-            
-        Returns:
-            str: Path to the configuration directory
-        """
-        if config_dir is None:
-            # First check current directory
-            current_dir = os.getcwd()
-            if os.path.exists(os.path.join(current_dir, "client_secrets.json")):
-                return current_dir
-            # Fall back to platform-specific directory
-            config_dir = self._get_platform_config_dir()
-        os.makedirs(config_dir, exist_ok=True)
-        return config_dir
+        # Use provided config_dir or default to app_root
+        self.config_dir = Path(config_dir) if config_dir else self.app_root
+        os.makedirs(self.config_dir, exist_ok=True)
+        
+        # Initialize file operations
+        self.file_ops = FileOperations()
+        
+        # Set up file paths
+        self._setup_file_paths()
     
     def _setup_file_paths(self) -> None:
         """Set up all file paths used by the application."""
@@ -59,9 +41,7 @@ class ConfigManager:
         
         # Create empty files if they don't exist
         for file_path in [self.titles_file, self.applied_titles_file, self.history_log]:
-            if not os.path.exists(file_path):
-                with open(file_path, "w") as f:
-                    f.write("")
+            self.file_ops.ensure_file_exists(file_path)
     
     def get_file_paths(self) -> Dict[str, str]:
         """Get all file paths used by the application.

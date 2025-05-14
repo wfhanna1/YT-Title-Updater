@@ -9,6 +9,7 @@ from google.oauth2.credentials import Credentials
 import urllib3
 from datetime import datetime
 from pathlib import Path
+import pytz
 
 # Suppress the OpenSSL warning
 urllib3.disable_warnings(urllib3.exceptions.NotOpenSSLWarning)
@@ -399,29 +400,45 @@ class YouTubeUpdaterCore:
                 f.write("Live Stream\n")
         return current
     
+    def _generate_dynamic_title(self) -> str:
+        """Generate a dynamic title based on the current date and time.
+        
+        Returns:
+            str: Generated title
+        """
+        est_timezone = pytz.timezone('US/Eastern')
+        current_time = datetime.now(est_timezone)
+        
+        # Format the date
+        date_str = current_time.strftime('%Y-%m-%d')
+        
+        # Check if it's Saturday after 5 PM EST
+        if current_time.weekday() == 5 and current_time.hour >= 17:
+            return f"Saturday Night Stream - {date_str}"
+        
+        # Default format for other times
+        return f"Live Stream - {date_str}"
+
     def update_title(self) -> None:
         """Update the current live stream title."""
         if not self.youtube:
             self._set_status("YouTube client not initialized", "error")
             return
         
+        # Check live status again before updating
+        self.check_live_status()
+        
         if not self.is_live:
             self._set_status("No live stream found", "error")
             return
         
-        # Check if titles file is empty
+        # Check if titles file is empty or has no valid titles
         if not os.path.exists(self.titles_file) or os.path.getsize(self.titles_file) == 0:
-            self.next_title = "Live Stream"
-            self.titles = ["Live Stream"]
-            with open(self.titles_file, "w") as f:
-                f.write("Live Stream\n")
-            self._set_status("Titles file empty, using default: Live Stream", "warning")
+            self.next_title = self._generate_dynamic_title()
+            self._set_status("Titles file empty, using dynamic title", "info")
         elif not self.next_title or not self.titles or self.next_title == "No titles available":
-            self.next_title = "Live Stream"
-            self.titles = ["Live Stream"]
-            with open(self.titles_file, "w") as f:
-                f.write("Live Stream\n")
-            self._set_status("No title available, using default: Live Stream", "warning")
+            self.next_title = self._generate_dynamic_title()
+            self._set_status("No title available, using dynamic title", "info")
 
         try:
             # Get the current live stream
@@ -473,6 +490,11 @@ class YouTubeUpdaterCore:
             
             # Update the current title
             self.current_title = self.next_title
+            
+            # If we used a dynamic title, we don't need to archive or rotate
+            if not os.path.exists(self.titles_file) or os.path.getsize(self.titles_file) == 0:
+                self._set_status(f"Title updated to: {self.next_title}", "success")
+                return
             
             # Archive the title and rotate to next
             try:
