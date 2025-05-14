@@ -1,6 +1,25 @@
+"""Core package for YouTube Title Updater."""
+
+from .title_manager import TitleManager
+from .default_title_generator import DefaultTitleGenerator
+from .youtube_client import YouTubeClient
+from .auth_manager import AuthManager
+from .config_manager import ConfigManager
+from .status_manager import StatusManager
+from .factory import ComponentFactory
+
+__all__ = [
+    'TitleManager',
+    'DefaultTitleGenerator',
+    'YouTubeClient',
+    'AuthManager',
+    'ConfigManager',
+    'StatusManager',
+    'ComponentFactory'
+]
+
 from typing import Optional
 from .interfaces import IYouTubeClient, IAuthManager, ITitleManager, IConfigManager
-from .status_manager import StatusManager
 from ..utils.logger import Logger
 from ..exceptions.custom_exceptions import YouTubeUpdaterError
 
