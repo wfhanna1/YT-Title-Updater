@@ -40,6 +40,8 @@ class YouTubeUpdaterGUI(QMainWindow):
         
         # Update display immediately
         self.update_display()
+        # Check stream status on start
+        self.check_status()
     
     def create_menu(self):
         """Create the application menu bar."""
