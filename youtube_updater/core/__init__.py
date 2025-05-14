@@ -86,25 +86,29 @@ class YouTubeUpdaterCore:
             if not self.youtube_client:
                 self.status_manager.set_status("YouTube client not initialized", "error")
                 return
-            if not self.is_live:
-                self.status_manager.set_status("Channel is not live", "warning")
-                return
-            # Get live stream info
+            
+            # Get live stream info first
             stream_info = self.youtube_client.get_live_stream_info()
             if not stream_info["is_live"]:
-                self.status_manager.set_status("Channel is no longer live", "warning")
+                self.status_manager.set_status("Channel is not live", "warning")
                 return
+                
             # Get next title and update
             new_title = self.title_manager.get_next_title()
             if not new_title:
                 self.status_manager.set_status("No titles available to update.", "warning")
                 return
+                
+            # Update the title using the video_id from our initial check
             self.youtube_client.update_video_title(stream_info["video_id"], new_title)
+            
             # Archive the used title
             self.title_manager.archive_title(new_title)
+            
             # Update current title
             self.current_title = new_title
             self.status_manager.set_status(f"Title updated to: {new_title}", "success")
+            
         except Exception as e:
             self.status_manager.set_status(f"Error updating title: {str(e)}", "error")
     
