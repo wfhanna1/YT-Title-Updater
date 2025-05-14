@@ -89,6 +89,9 @@ class YouTubeUpdaterGUI(QMainWindow):
     
     def create_buttons(self):
         """Create action buttons."""
+        # Stream Status Section
+        self.create_stream_status()
+        
         button_layout = QHBoxLayout()
         
         # Update Title Button
@@ -102,6 +105,25 @@ class YouTubeUpdaterGUI(QMainWindow):
         button_layout.addWidget(self.open_titles_button)
         
         self.layout.addLayout(button_layout)
+    
+    def create_stream_status(self):
+        """Create the stream status section."""
+        status_layout = QHBoxLayout()
+        
+        # Status Header
+        status_header = QLabel("Stream Status:")
+        status_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        status_layout.addWidget(status_header)
+        
+        # Status Display
+        self.stream_status_display = QLabel("Checking...")
+        self.stream_status_display.setFont(QFont("Arial", 12))
+        status_layout.addWidget(self.stream_status_display)
+        
+        # Add stretch to push status to the left
+        status_layout.addStretch()
+        
+        self.layout.addLayout(status_layout)
     
     def create_status_bar(self):
         """Create the status bar."""
@@ -126,11 +148,21 @@ class YouTubeUpdaterGUI(QMainWindow):
         self.statusBar.setStyleSheet(f"color: {color};")
         self.statusBar.showMessage(status_text)
     
+    def update_stream_status(self):
+        """Update the stream status display."""
+        if self.core.is_live:
+            self.stream_status_display.setText("Live")
+            self.stream_status_display.setStyleSheet("color: green;")
+        else:
+            self.stream_status_display.setText("Offline")
+            self.stream_status_display.setStyleSheet("color: red;")
+    
     def update_display(self):
         """Update the display with current information."""
         self.current_title_display.setText(self.core.current_title)
         next_title_text = self.core.next_title if self.core.next_title else "No titles available"
         self.next_title_display.setText(next_title_text)
+        self.update_stream_status()
         self.update_status()
     
     def check_status(self):
