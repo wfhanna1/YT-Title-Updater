@@ -1,0 +1,6 @@
+@echo off
+echo Running YouTube Title Updater...
+"C:\Users\St Mary\Documents\YT-Title-Updater\YT-Title-Updater\dist\yt-title-updater-cli\yt-title-updater-cli.exe" update
+echo Waiting for 1 minute...
+timeout /t 60 /nobreak > nul
+exit 
