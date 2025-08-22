@@ -332,6 +332,10 @@ class YouTubeUpdaterCore:
                     
                     with open(self.titles_file, "w") as f:
                         f.write("\n".join(titles) + "\n")
+                    
+                    # Keep in-memory state in sync with file after removal
+                    self.titles = titles if titles else [self.DEFAULT_TITLE]
+                    self.next_title = self.titles[0]
             
             # Add the title to applied-titles.txt with timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -496,22 +500,15 @@ class YouTubeUpdaterCore:
                 self._set_status(f"Title updated to: {self.next_title}", "success")
                 return
             
-            # Archive the title and rotate to next
+            # Archive the title and advance next title based on updated file
             try:
-                # First archive the title
                 self._archive_title(used_title)
-                # Then rotate to the next title
-                self._rotate_titles()
-                # Update next_title to the new first title
-                if not self.titles:
-                    self.titles = ["Live Stream"]
-                self.next_title = self.titles[0]
             except Exception as e:
                 # Log the error but don't fail the update
                 self._set_status(f"Title updated but error archiving: {str(e)}", "warning")
                 return
             
-            self._set_status(f"Title updated to: {self.next_title}", "success")
+            self._set_status(f"Title updated to: {self.current_title}", "success")
             
         except Exception as e:
             self._set_status(f"Error updating title: {str(e)}", "error")
