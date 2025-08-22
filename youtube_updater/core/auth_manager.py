@@ -4,7 +4,6 @@ from typing import Optional
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from ..exceptions.custom_exceptions import AuthenticationError
 
 class AuthManager:
     """Handles YouTube API authentication."""
@@ -28,7 +27,7 @@ class AuthManager:
             Credentials: Valid Google OAuth2 credentials
             
         Raises:
-            AuthenticationError: If authentication fails
+            Exception: If authentication fails
         """
         try:
             creds = self._load_credentials()
@@ -37,7 +36,7 @@ class AuthManager:
             return creds
             
         except Exception as e:
-            raise AuthenticationError(f"Authentication failed: {str(e)}")
+            raise Exception(f"Authentication failed: {str(e)}")
     
     def _load_credentials(self) -> Optional[Credentials]:
         """Load credentials from token file if it exists.
@@ -60,14 +59,14 @@ class AuthManager:
             Credentials: Refreshed or new credentials
             
         Raises:
-            AuthenticationError: If authentication fails
+            Exception: If authentication fails
         """
         try:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
                 if not os.path.exists(self.client_secrets_path):
-                    raise AuthenticationError(
+                    raise Exception(
                         f"Client secrets file not found at: {self.client_secrets_path}"
                     )
                     
@@ -83,4 +82,4 @@ class AuthManager:
             return creds
             
         except Exception as e:
-            raise AuthenticationError(f"Authentication failed: {str(e)}") 
+            raise Exception(f"Authentication failed: {str(e)}") 

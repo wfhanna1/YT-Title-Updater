@@ -1,10 +1,8 @@
 from typing import Optional, Dict, Any
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from ..exceptions.custom_exceptions import YouTubeAPIError
-from .interfaces import IYouTubeClient
 
-class YouTubeClient(IYouTubeClient):
+class YouTubeClient:
     """Handles all YouTube API interactions."""
     
     def __init__(self, credentials: Credentials):
@@ -23,20 +21,20 @@ class YouTubeClient(IYouTubeClient):
             str: Channel ID
             
         Raises:
-            YouTubeAPIError: If channel ID cannot be retrieved
+            Exception: If channel ID cannot be retrieved
         """
         try:
             request = self.youtube.channels().list(part="id", mine=True)
             response = request.execute()
             
             if not response.get("items"):
-                raise YouTubeAPIError("Could not retrieve channel ID")
+                raise Exception("Could not retrieve channel ID")
                 
             self.channel_id = response["items"][0]["id"]
             return self.channel_id
             
         except Exception as e:
-            raise YouTubeAPIError(f"Error getting channel ID: {str(e)}")
+            raise Exception(f"Error getting channel ID: {str(e)}")
     
     def get_live_stream_info(self) -> Dict[str, Any]:
         """Get information about the current live stream.
@@ -48,7 +46,7 @@ class YouTubeClient(IYouTubeClient):
             - title (str, optional)
             
         Raises:
-            YouTubeAPIError: If live stream info cannot be retrieved
+            Exception: If live stream info cannot be retrieved
         """
         if not self.channel_id:
             self.get_channel_id()
@@ -73,7 +71,7 @@ class YouTubeClient(IYouTubeClient):
             return {"is_live": False}
             
         except Exception as e:
-            raise YouTubeAPIError(f"Error getting live stream info: {str(e)}")
+            raise Exception(f"Error getting live stream info: {str(e)}")
     
     def update_video_title(self, video_id: str, new_title: str) -> None:
         """Update the title of a video.
@@ -83,7 +81,7 @@ class YouTubeClient(IYouTubeClient):
             new_title: New title for the video
             
         Raises:
-            YouTubeAPIError: If title update fails
+            Exception: If title update fails
         """
         try:
             # Get current video details
@@ -94,7 +92,7 @@ class YouTubeClient(IYouTubeClient):
             video_response = video_request.execute()
             
             if not video_response.get("items"):
-                raise YouTubeAPIError("Could not retrieve video details")
+                raise Exception("Could not retrieve video details")
             
             # Update the title
             snippet = video_response["items"][0]["snippet"]
@@ -110,4 +108,4 @@ class YouTubeClient(IYouTubeClient):
             update_request.execute()
             
         except Exception as e:
-            raise YouTubeAPIError(f"Error updating video title: {str(e)}") 
+            raise Exception(f"Error updating video title: {str(e)}") 

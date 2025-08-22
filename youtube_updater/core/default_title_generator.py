@@ -1,41 +1,103 @@
 from datetime import datetime
 import pytz
 from typing import Optional
-from .interfaces import ITitleGenerator
 
-class DefaultTitleGenerator(ITitleGenerator):
-    """Generates default titles based on current date and time."""
+class DefaultTitleGenerator:
+    """Generates dynamic titles based on current time and day."""
     
     def __init__(self, timezone: str = "US/Eastern"):
         """Initialize the title generator.
         
         Args:
-            timezone: Timezone to use for time-based decisions (default: US/Eastern)
+            timezone: Timezone to use for title generation (default: US/Eastern)
         """
-        self.timezone = pytz.timezone(timezone)
+        self.timezone = timezone
+        self.tz = pytz.timezone(timezone)
     
     def generate_title(self) -> str:
-        """Generate a title based on current date and time.
+        """Generate a title based on current time and day.
         
         Returns:
-            str: Generated title following the pattern:
-                - For Saturday between 5 PM and 11:45 PM EST: "Day of week, Month DD, YYYY - Vespers and Midnight Praises"
-                - For all other times: "Day of week, Month DD, YYYY - Divine Liturgy"
+            str: Generated title
         """
-        current_time = datetime.now(self.timezone)
+        now = datetime.now(self.tz)
+        weekday = now.weekday()  # Monday=0, Sunday=6
+        hour = now.hour
         
-        # Format the date part
-        date_part = current_time.strftime("%A, %B %d, %Y")
+        # Saturday logic (weekday=5)
+        if weekday == 5:  # Saturday
+            if hour < 17:  # Before 5 PM
+                return f"{now.strftime('%A, %B %d, %Y')} - Divine Liturgy"
+            else:  # 5 PM and after
+                return f"{now.strftime('%A, %B %d, %Y')} - Vespers and Midnight Praises"
         
-        # Determine if it's Saturday between 5 PM and 11:45 PM EST
-        is_saturday_evening = (
-            current_time.weekday() == 5 and  # Saturday
-            current_time.hour >= 17 and  # After 5 PM
-            (current_time.hour < 23 or  # Before 11 PM
-             (current_time.hour == 23 and current_time.minute <= 45))  # Or before 11:45 PM
-        )
+        # Sunday logic (weekday=6)
+        elif weekday == 6:  # Sunday
+            return f"{now.strftime('%A, %B %d, %Y')} - Divine Liturgy"
         
-        # Generate the appropriate suffix
-        suffix = "Vespers and Midnight Praises" if is_saturday_evening else "Divine Liturgy"
+        # Weekday logic (Monday=0 through Friday=4)
+        else:
+            return f"{now.strftime('%A, %B %d, %Y')} - Divine Liturgy"
+    
+    def generate_title_for_datetime(self, dt: datetime) -> str:
+        """Generate a title for a specific datetime.
         
-        return f"{date_part} - {suffix}" 
+        Args:
+            dt: Datetime to generate title for
+            
+        Returns:
+            str: Generated title
+        """
+        # Convert to our timezone if it's naive
+        if dt.tzinfo is None:
+            dt = self.tz.localize(dt)
+        else:
+            dt = dt.astimezone(self.tz)
+        
+        weekday = dt.weekday()
+        hour = dt.hour
+        
+        # Saturday logic
+        if weekday == 5:  # Saturday
+            if hour < 17:  # Before 5 PM
+                return f"{dt.strftime('%A, %B %d, %Y')} - Divine Liturgy"
+            else:  # 5 PM and after
+                return f"{dt.strftime('%A, %B %d, %Y')} - Vespers and Midnight Praises"
+        
+        # Sunday logic
+        elif weekday == 6:  # Sunday
+            return f"{dt.strftime('%A, %B %d, %Y')} - Divine Liturgy"
+        
+        # Weekday logic
+        else:
+            return f"{dt.strftime('%A, %B %d, %Y')} - Divine Liturgy"
+    
+    def get_service_type(self, dt: Optional[datetime] = None) -> str:
+        """Get the type of service for a given time.
+        
+        Args:
+            dt: Datetime to check (defaults to current time)
+            
+        Returns:
+            str: Service type
+        """
+        if dt is None:
+            dt = datetime.now(self.tz)
+        else:
+            if dt.tzinfo is None:
+                dt = self.tz.localize(dt)
+            else:
+                dt = dt.astimezone(self.tz)
+        
+        weekday = dt.weekday()
+        hour = dt.hour
+        
+        if weekday == 5:  # Saturday
+            if hour < 17:
+                return "Divine Liturgy"
+            else:
+                return "Vespers and Midnight Praises"
+        elif weekday == 6:  # Sunday
+            return "Divine Liturgy"
+        else:
+            return "Divine Liturgy"

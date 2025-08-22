@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Optional
-from ..utils.file_operations import FileOperations
 
 class ConfigManager:
     """Manages application configuration and file paths."""
@@ -13,20 +12,17 @@ class ConfigManager:
         Args:
             config_dir: Optional custom config directory path
         """
-        # Get the application root directory (where the executable is)
-        if getattr(sys, 'frozen', False):
-            # Running as compiled executable
-            self.app_root = Path(sys._MEIPASS)
-        else:
-            # Running as script
-            self.app_root = Path(__file__).parent.parent.parent
+        # Use provided config_dir or default to platform-specific location
+        if config_dir is None:
+            if sys.platform == "win32":
+                config_dir = os.path.join(os.getenv("APPDATA"), "yt_title_updater")
+            elif sys.platform == "darwin":
+                config_dir = os.path.join(os.path.expanduser("~"), "Documents", "yt_title_updater")
+            else:
+                config_dir = os.path.join(os.path.expanduser("~"), ".config", "yt_title_updater")
         
-        # Use provided config_dir or default to app_root
-        self.config_dir = Path(config_dir) if config_dir else self.app_root
+        self.config_dir = Path(config_dir)
         os.makedirs(self.config_dir, exist_ok=True)
-        
-        # Initialize file operations
-        self.file_ops = FileOperations()
         
         # Set up file paths
         self._setup_file_paths()
@@ -41,7 +37,9 @@ class ConfigManager:
         
         # Create empty files if they don't exist
         for file_path in [self.titles_file, self.applied_titles_file, self.history_log]:
-            self.file_ops.ensure_file_exists(file_path)
+            if not os.path.exists(file_path):
+                with open(file_path, "w") as f:
+                    f.write("")
     
     def get_file_paths(self) -> Dict[str, str]:
         """Get all file paths used by the application.

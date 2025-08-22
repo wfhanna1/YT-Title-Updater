@@ -5,7 +5,6 @@ from .default_title_generator import DefaultTitleGenerator
 from .youtube_client import YouTubeClient
 from .auth_manager import AuthManager
 from .config_manager import ConfigManager
-from .status_manager import StatusManager
 from .factory import ComponentFactory
 
 __all__ = [
@@ -14,14 +13,10 @@ __all__ = [
     'YouTubeClient',
     'AuthManager',
     'ConfigManager',
-    'StatusManager',
     'ComponentFactory'
 ]
 
 from typing import Optional
-from .interfaces import IYouTubeClient, IAuthManager, ITitleManager, IConfigManager
-from ..utils.logger import Logger
-from ..exceptions.custom_exceptions import YouTubeUpdaterError
 
 class YouTubeUpdaterCore:
     """Core functionality for YouTube title updating.
@@ -32,11 +27,10 @@ class YouTubeUpdaterCore:
     
     def __init__(
         self,
-        config_manager: IConfigManager,
-        title_manager: ITitleManager,
-        auth_manager: Optional[IAuthManager] = None,
-        youtube_client: Optional[IYouTubeClient] = None,
-        logger: Optional[Logger] = None
+        config_manager: ConfigManager,
+        title_manager: TitleManager,
+        auth_manager: Optional[AuthManager] = None,
+        youtube_client: Optional[YouTubeClient] = None
     ):
         """Initialize the YouTube updater core.
         
@@ -45,26 +39,37 @@ class YouTubeUpdaterCore:
             title_manager: Title manager instance
             auth_manager: Optional authentication manager instance
             youtube_client: Optional YouTube client instance
-            logger: Optional logger instance
         """
         self.config = config_manager
         self.title_manager = title_manager
         self.auth_manager = auth_manager
         self.youtube_client = youtube_client
-        self.logger = logger
-        
-        # Initialize status manager
-        self.status_manager = StatusManager(logger)
         
         # Initialize state
         self.current_title = "Not Live"
         self.is_live = False
+        self.status = "Initializing"
+        self.status_type = "info"
+    
+    def _set_status(self, message: str, status_type: str = "info") -> None:
+        """Set status message and type.
+        
+        Args:
+            message: Status message
+            status_type: Type of status (info, success, error, warning)
+        """
+        valid_types = ("info", "success", "error", "warning")
+        if status_type not in valid_types:
+            raise ValueError(f"Invalid status type: {status_type}")
+        
+        self.status = message
+        self.status_type = status_type
     
     def check_live_status(self) -> None:
         """Check if the channel is currently live streaming."""
         try:
             if not self.youtube_client:
-                self.status_manager.set_status("YouTube client not initialized", "error")
+                self._set_status("YouTube client not initialized", "error")
                 return
             
             stream_info = self.youtube_client.get_live_stream_info()
@@ -72,31 +77,31 @@ class YouTubeUpdaterCore:
             
             if self.is_live:
                 self.current_title = stream_info["title"]
-                self.status_manager.set_status("Channel is live", "success")
+                self._set_status("Channel is live", "success")
             else:
                 self.current_title = "Not Live"
-                self.status_manager.set_status("Channel is not live", "info")
+                self._set_status("Channel is not live", "info")
                 
         except Exception as e:
-            self.status_manager.set_status(f"Error checking live status: {str(e)}", "error")
+            self._set_status(f"Error checking live status: {str(e)}", "error")
     
     def update_title(self) -> None:
         """Update the title of the current live stream."""
         try:
             if not self.youtube_client:
-                self.status_manager.set_status("YouTube client not initialized", "error")
+                self._set_status("YouTube client not initialized", "error")
                 return
             
             # Get live stream info first
             stream_info = self.youtube_client.get_live_stream_info()
             if not stream_info["is_live"]:
-                self.status_manager.set_status("Channel is not live", "warning")
+                self._set_status("Channel is not live", "warning")
                 return
                 
             # Get next title and update
             new_title = self.title_manager.get_next_title()
             if not new_title:
-                self.status_manager.set_status("No titles available to update.", "warning")
+                self._set_status("No titles available to update.", "warning")
                 return
                 
             # Update the title using the video_id from our initial check
@@ -107,10 +112,10 @@ class YouTubeUpdaterCore:
             
             # Update current title
             self.current_title = new_title
-            self.status_manager.set_status(f"Title updated to: {new_title}", "success")
+            self._set_status(f"Title updated to: {new_title}", "success")
             
         except Exception as e:
-            self.status_manager.set_status(f"Error updating title: {str(e)}", "error")
+            self._set_status(f"Error updating title: {str(e)}", "error")
     
     def get_next_title(self) -> str:
         """Get the next title in the rotation.
@@ -128,20 +133,10 @@ class YouTubeUpdaterCore:
         """
         try:
             self.title_manager.add_title(title)
-            self.status_manager.set_status(f"Title added: {title}", "success")
+            self._set_status(f"Title added: {title}", "success")
         except Exception as e:
-            self.status_manager.set_status(f"Error adding title: {str(e)}", "error")
+            self._set_status(f"Error adding title: {str(e)}", "error")
     
-    @property
-    def status(self) -> str:
-        """Get the current status message."""
-        return self.status_manager.status
-    
-    @property
-    def status_type(self) -> str:
-        """Get the current status type."""
-        return self.status_manager.status_type
-
     def open_config_dir(self) -> None:
         """Open the configuration directory in Finder (macOS)."""
         import os

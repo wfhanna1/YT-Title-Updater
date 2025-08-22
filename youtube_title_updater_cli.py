@@ -8,7 +8,6 @@ A command-line interface for automatically updating YouTube live stream titles.
 import sys
 import argparse
 from youtube_updater.core import ComponentFactory
-from youtube_updater.core.default_title_generator import DefaultTitleGenerator
 
 def parse_args():
     """Parse command line arguments."""
@@ -28,7 +27,6 @@ def main():
     try:
         # Use the factory to create the core updater
         updater = ComponentFactory.create_core(config_dir=args.config_dir)
-        title_generator = DefaultTitleGenerator()
         
         if args.status:
             updater.check_live_status()
@@ -40,9 +38,10 @@ def main():
         if args.update:
             updater.check_live_status()
             if updater.is_live:
-                # If no titles are available, use the default title generator
+                # Check if titles are available
                 if not updater.get_next_title():
-                    updater.add_title(title_generator.generate_title())
+                    print("No titles available. Please add titles to your titles.txt file.")
+                    return
                 updater.update_title()
                 print(f"Title updated. Status: {updater.status}")
             else:

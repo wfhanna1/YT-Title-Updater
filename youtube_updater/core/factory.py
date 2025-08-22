@@ -3,9 +3,6 @@ from .youtube_client import YouTubeClient
 from .auth_manager import AuthManager
 from .title_manager import TitleManager
 from .config_manager import ConfigManager
-from .interfaces import IYouTubeClient, IAuthManager, ITitleManager, IConfigManager
-from ..utils.logger import Logger
-from ..utils.file_operations import FileOperations
 
 class ComponentFactory:
     """Factory for creating application components."""
@@ -20,12 +17,6 @@ class ComponentFactory:
         Returns:
             YouTubeUpdaterCore: Configured core instance
         """
-        # Create logger
-        logger = Logger()
-        
-        # Create file operations
-        file_ops = FileOperations()
-        
         # Create config manager
         config_manager = ConfigManager(config_dir)
         
@@ -54,6 +45,5 @@ class ComponentFactory:
             config_manager=config_manager,
             title_manager=title_manager,
             auth_manager=auth_manager,
-            youtube_client=youtube_client,
-            logger=logger
+            youtube_client=youtube_client
         ) 
