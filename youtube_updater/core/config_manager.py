@@ -1,7 +1,7 @@
 import os
-import sys
 from pathlib import Path
 from typing import Dict, Optional
+import platformdirs
 from ..utils.file_operations import FileOperations
 
 class ConfigManager:
@@ -13,16 +13,11 @@ class ConfigManager:
         Args:
             config_dir: Optional custom config directory path
         """
-        # Get the application root directory (where the executable is)
-        if getattr(sys, 'frozen', False):
-            # Running as compiled executable
-            self.app_root = Path(sys._MEIPASS)
+        # Use provided config_dir or default to platformdirs user data directory
+        if config_dir:
+            self.config_dir = Path(config_dir).resolve()
         else:
-            # Running as script
-            self.app_root = Path(__file__).parent.parent.parent
-        
-        # Use provided config_dir or default to app_root
-        self.config_dir = Path(config_dir) if config_dir else self.app_root
+            self.config_dir = Path(platformdirs.user_data_dir("YTTitleUpdater", "YTTitleUpdater"))
         os.makedirs(self.config_dir, exist_ok=True)
         
         # Initialize file operations
@@ -35,7 +30,7 @@ class ConfigManager:
         """Set up all file paths used by the application."""
         self.titles_file = os.path.join(self.config_dir, "titles.txt")
         self.applied_titles_file = os.path.join(self.config_dir, "applied-titles.txt")
-        self.token_path = os.path.join(self.config_dir, "token.pickle")
+        self.token_path = os.path.join(self.config_dir, "token.json")
         self.client_secrets_path = os.path.join(self.config_dir, "client_secrets.json")
         self.history_log = os.path.join(self.config_dir, "history.log")
         

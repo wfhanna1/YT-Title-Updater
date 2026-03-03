@@ -1,5 +1,5 @@
+import json
 import os
-import pickle
 from typing import Optional
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -37,8 +37,8 @@ class AuthManager:
             return creds
             
         except Exception as e:
-            raise AuthenticationError(f"Authentication failed: {str(e)}")
-    
+            raise AuthenticationError(f"Authentication failed: {str(e)}") from e
+
     def _load_credentials(self) -> Optional[Credentials]:
         """Load credentials from token file if it exists.
         
@@ -46,8 +46,8 @@ class AuthManager:
             Optional[Credentials]: Loaded credentials or None if file doesn't exist
         """
         if os.path.exists(self.token_path):
-            with open(self.token_path, "rb") as token:
-                return pickle.load(token)
+            with open(self.token_path, "r") as token:
+                return Credentials.from_authorized_user_info(json.loads(token.read()))
         return None
     
     def _refresh_or_authenticate(self, creds: Optional[Credentials]) -> Credentials:
@@ -77,10 +77,12 @@ class AuthManager:
                 )
                 creds = flow.run_local_server(port=0)
             
-            # Save the credentials
-            with open(self.token_path, "wb") as token:
-                pickle.dump(creds, token)
+            # Save credentials with owner-only permissions (0o600) so the
+            # OAuth refresh token is not world-readable on Unix systems.
+            fd = os.open(self.token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as token:
+                token.write(creds.to_json())
             return creds
-            
+
         except Exception as e:
-            raise AuthenticationError(f"Authentication failed: {str(e)}") 
+            raise AuthenticationError(f"Authentication failed: {str(e)}") from e 

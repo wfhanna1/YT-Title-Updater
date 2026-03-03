@@ -23,8 +23,7 @@ class TitleManager(ITitleManager):
         self.file_ops = FileOperations()
         self.default_generator = DefaultTitleGenerator()
         self.titles: List[str] = []
-        self.next_title: Optional[str] = None
-        
+
         # Create files if they don't exist
         self._ensure_files_exist()
         self.load_titles()
@@ -46,28 +45,39 @@ class TitleManager(ITitleManager):
             if os.path.exists(self.titles_file):
                 with open(self.titles_file, "r") as f:
                     self.titles = [line.strip() for line in f if line.strip()]
-                    self.next_title = self.titles[0] if self.titles else None
             else:
                 self.titles = []
-                self.next_title = None
         except Exception as e:
             raise TitleManagerError(f"Error loading titles: {str(e)}")
     
     def get_next_title(self) -> Optional[str]:
-        """Get the next title in the rotation.
-        
+        """Get the next title in the rotation, rotating the file so the used
+        title moves to the end.
+
         Returns:
             Optional[str]: Next title to use, or None if no titles available
         """
         titles = self.file_ops.read_lines(self.titles_file)
         if not titles:
             return self.default_generator.generate_title()
-        
+
         # Get the first title and move it to the end
         next_title = titles[0]
         titles = titles[1:] + [next_title]
         self.file_ops.write_lines(self.titles_file, titles)
         return next_title
+
+    def peek_next_title(self) -> Optional[str]:
+        """Return the next title without rotating the file.
+
+        Returns:
+            Optional[str]: The first non-empty title in the file, or None if
+            no titles are available.
+        """
+        titles = [t for t in self.file_ops.read_lines(self.titles_file) if t]
+        if not titles:
+            return None
+        return titles[0]
     
     def rotate_titles(self) -> Optional[str]:
         """Rotate to the next title in the list.
@@ -76,17 +86,13 @@ class TitleManager(ITitleManager):
             Optional[str]: The title that was just used, or None if no titles available
         """
         if not self.titles:
-            self.next_title = None
             return None
         # Store the current title before rotation
         current = self.titles[0]
-        
+
         # Rotate the list
         self.titles.append(self.titles.pop(0))
-        
-        # Update next_title to the new first title
-        self.next_title = self.titles[0]
-        
+
         # Update titles file
         with open(self.titles_file, "w") as f:
             f.write("\n".join(self.titles) + "\n" if self.titles else "")

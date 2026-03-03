@@ -30,22 +30,27 @@ class IAuthManager(ABC):
 
 class ITitleManager(ABC):
     """Interface for title manager."""
-    
+
     @abstractmethod
     def get_next_title(self) -> str:
-        """Get the next title in the rotation."""
+        """Get the next title in the rotation (rotates the file)."""
         pass
-    
+
+    @abstractmethod
+    def peek_next_title(self) -> Optional[str]:
+        """Return the next title without rotating the file."""
+        pass
+
     @abstractmethod
     def rotate_titles(self) -> str:
         """Rotate to the next title in the list."""
         pass
-    
+
     @abstractmethod
     def archive_title(self, title: str) -> None:
         """Archive a title that has been used."""
         pass
-    
+
     @abstractmethod
     def add_title(self, title: str) -> None:
         """Add a new title to the list."""

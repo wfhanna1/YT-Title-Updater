@@ -1,186 +1,146 @@
-import os
-import sys
-import tempfile
-from unittest import TestCase, mock
-from PyQt6.QtWidgets import QApplication, QMenu
-from PyQt6.QtTest import QTest
-from PyQt6.QtCore import Qt
-from youtube_updater.core import YouTubeUpdaterCore
-from youtube_updater.gui import YouTubeUpdaterGUI
+"""
+Integration tests for YouTube Title Updater.
 
-class TestIntegration(TestCase):
-    """Integration tests for YouTube Title Updater."""
-    
-    @classmethod
-    def setUpClass(cls):
-        """Set up test environment."""
-        # Create QApplication instance
-        cls.app = QApplication(sys.argv)
-    
+The GUI (PyQt6) has been removed. These tests now verify integration
+between YouTubeUpdaterCore, TitleManager, and YouTubeClient using mocks
+where the real YouTube API is not available.
+"""
+
+import os
+import tempfile
+import shutil
+import unittest
+from unittest.mock import MagicMock, patch
+
+from youtube_updater.core import YouTubeUpdaterCore
+from youtube_updater.core.title_manager import TitleManager
+from youtube_updater.exceptions.custom_exceptions import YouTubeAPIError
+
+
+def _build_core_with_real_title_manager(temp_dir, youtube_client=None):
+    """Build a YouTubeUpdaterCore with a real TitleManager backed by temp files."""
+    config_manager = MagicMock()
+    config_manager.get_client_secrets_path.return_value = os.path.join(
+        temp_dir, "client_secrets.json"
+    )
+    config_manager.get_file_paths.return_value = {
+        "titles_file": os.path.join(temp_dir, "titles.txt"),
+        "applied_titles_file": os.path.join(temp_dir, "applied-titles.txt"),
+        "history_log": os.path.join(temp_dir, "history.log"),
+        "token_path": os.path.join(temp_dir, "token.pickle"),
+    }
+
+    title_manager = TitleManager(
+        titles_file=os.path.join(temp_dir, "titles.txt"),
+        applied_titles_file=os.path.join(temp_dir, "applied-titles.txt"),
+        history_log=os.path.join(temp_dir, "history.log"),
+    )
+
+    return YouTubeUpdaterCore(
+        config_manager=config_manager,
+        title_manager=title_manager,
+        youtube_client=youtube_client,
+    )
+
+
+class TestCoreIntegration(unittest.TestCase):
+    """Integration tests for YouTubeUpdaterCore with TitleManager."""
+
     def setUp(self):
-        """Set up test environment."""
-        # Create temporary directory for testing
+        """Set up test environment with a temporary directory."""
         self.temp_dir = tempfile.mkdtemp()
-        
-        # Create mock client secrets file
-        with open(os.path.join(self.temp_dir, "client_secrets.json"), "w") as f:
-            f.write("{}")
-        
-        # Create core instance
-        self.core = YouTubeUpdaterCore(config_dir=self.temp_dir)
-        self.core._test_mode = True  # Enable test mode
-        
-        # Create GUI instance
-        self.gui = YouTubeUpdaterGUI(core=self.core)
-        self.gui.show()
-        QTest.qWaitForWindowExposed(self.gui)
-        
-        # Ensure initial state
-        self.core._set_status("Initialized", "info")
-        self.gui.update_display()
-        QTest.qWait(100)  # Wait for GUI to update
-        
-        # Clear any existing status
-        self.core._set_status("", "info")
-        self.gui.update_display()
-        QTest.qWait(100)  # Wait for GUI to update
-    
-    def tearDown(self):
-        """Clean up test environment."""
-        self.gui.close()
-        # Clean up temporary files
-        for file in os.listdir(self.temp_dir):
-            os.remove(os.path.join(self.temp_dir, file))
-        os.rmdir(self.temp_dir)
-    
-    @mock.patch('youtube_updater.core.build')
-    @mock.patch('youtube_updater.core.InstalledAppFlow')
-    def test_youtube_integration(self, mock_flow, mock_build):
-        """Test YouTube API integration."""
-        # Mock the YouTube API response
-        mock_build.return_value.channels.return_value.list.return_value.execute.return_value = {
-            "items": [{"id": "test_channel_id"}]
-        }
-        
-        # Mock the search response
-        mock_build.return_value.search.return_value.list.return_value.execute.return_value = {
-            "items": [{
-                "id": {"videoId": "test_video_id"},
-                "snippet": {
-                    "title": "Test Live Stream",
-                    "categoryId": "22"
-                }
-            }]
-        }
-        
-        # Mock the flow
-        mock_flow.from_client_secrets_file.return_value.run_local_server.return_value = mock.MagicMock()
-        
-        # Set up YouTube and wait for GUI update
-        self.core.setup_youtube()
-        self.gui.update_display()
-        QTest.qWait(100)  # Wait for GUI to update
-        
-        # Check if GUI reflects the changes
-        self.assertEqual(self.gui.current_title_display.text(), "Test Live Stream")
-        self.assertTrue(self.core.is_live)
-    
-    def test_title_management_integration(self):
-        """Test title management integration."""
-        # Create titles file
+
         with open(os.path.join(self.temp_dir, "titles.txt"), "w") as f:
             f.write("Title 1\nTitle 2\nTitle 3\n")
-        
-        # Load titles and wait for GUI update
-        self.core.load_titles()
-        self.gui.update_display()
-        QTest.qWait(100)  # Wait for GUI to update
-        
-        # Check if GUI reflects the changes
-        self.assertEqual(self.gui.next_title_display.text(), "Title 1")
-        
-        # Mock YouTube API for update_title
-        with mock.patch.object(self.core, 'youtube') as mock_youtube:
-            mock_youtube.search().list().execute.return_value = {
-                "items": [{
-                    "id": {"videoId": "test_video_id"},
-                    "snippet": {"title": "Current Title"}
-                }]
-            }
-            mock_youtube.videos().list().execute.return_value = {
-                "items": [{
-                    "snippet": {"title": "Current Title"}
-                }]
-            }
-            mock_youtube.videos().update().execute.return_value = {}
-            
-            # Set live status
-            self.core.is_live = True
-            self.core.channel_id = "test_channel_id"
-            
-            # Update title and wait for GUI update
-            self.core.update_title()
-            self.gui.update_display()
-            QTest.qWait(100)  # Wait for GUI to update
-            
-            # Check if GUI reflects the changes
-            self.assertEqual(self.gui.next_title_display.text(), "Title 2")
-    
-    def test_status_integration(self):
-        """Test status integration."""
-        # Set status and wait for GUI update
-        self.core._set_status("Test Status", "success")
-        self.gui.update_display()
-        QTest.qWait(100)  # Wait for GUI to update
-        
-        # Check if GUI reflects the changes
-        self.assertEqual(self.gui.statusBar.currentMessage(), "Test Status")
-        
-        # Set error status and wait for GUI update
-        self.core._set_status("Error Message", "error")
-        self.gui.update_display()
-        QTest.qWait(100)  # Wait for GUI to update
-        
-        # Check if GUI reflects the changes
-        self.assertEqual(self.gui.statusBar.currentMessage(), "Error Message")
-    
-    def test_button_integration(self):
-        """Test button integration."""
-        # Mock the update_title method
-        with mock.patch.object(self.core, 'update_title') as mock_update:
-            # Click the update button and wait for event processing
-            QTest.mouseClick(self.gui.update_button, Qt.MouseButton.LeftButton)
-            QApplication.processEvents()
-            QTest.qWait(100)  # Wait for events to be processed
-            mock_update.assert_called_once()
-        
-        # Mock the open_titles_file method
-        with mock.patch.object(self.core, 'open_titles_file') as mock_open:
-            # Click the open titles button and wait for event processing
-            QTest.mouseClick(self.gui.open_titles_button, Qt.MouseButton.LeftButton)
-            QApplication.processEvents()
-            QTest.qWait(100)  # Wait for events to be processed
-            mock_open.assert_called_once()
-    
-    def test_menu_integration(self):
-        """Test menu integration."""
-        menubar = self.gui.menuBar()
-        file_menu = menubar.findChild(QMenu, "File")
-        
-        # Mock the open_config_dir method
-        with mock.patch.object(self.core, 'open_config_dir') as mock_open:
-            # Trigger the open config folder action and wait for event processing
-            open_config_action = file_menu.actions()[0]
-            open_config_action.trigger()
-            QApplication.processEvents()
-            QTest.qWait(100)  # Wait for events to be processed
-            mock_open.assert_called_once()
-        
-        # Mock the check_live_status method
-        with mock.patch.object(self.core, 'check_live_status') as mock_check:
-            # Trigger the check now action and wait for event processing
-            check_now_action = file_menu.actions()[3]
-            check_now_action.trigger()
-            QApplication.processEvents()
-            QTest.qWait(100)  # Wait for events to be processed
-            mock_check.assert_called_once() 
+
+        self.mock_youtube = MagicMock()
+        self.core = _build_core_with_real_title_manager(
+            self.temp_dir, youtube_client=self.mock_youtube
+        )
+
+    def tearDown(self):
+        """Clean up temporary directory."""
+        shutil.rmtree(self.temp_dir)
+
+    def test_check_live_status_live_integration(self):
+        """Test that check_live_status correctly sets is_live and current_title."""
+        self.mock_youtube.get_live_stream_info.return_value = {
+            "is_live": True,
+            "video_id": "vid_abc",
+            "title": "Live Stream Title",
+        }
+
+        self.core.check_live_status()
+
+        self.assertTrue(self.core.is_live)
+        self.assertEqual(self.core.current_title, "Live Stream Title")
+        self.assertEqual(self.core.status, "Channel is live")
+
+    def test_check_live_status_not_live_integration(self):
+        """Test check_live_status sets correct state when not live."""
+        self.mock_youtube.get_live_stream_info.return_value = {"is_live": False}
+
+        self.core.check_live_status()
+
+        self.assertFalse(self.core.is_live)
+        self.assertEqual(self.core.current_title, "Not Live")
+
+    def test_update_title_reads_from_titles_file(self):
+        """Test that update_title reads the next title from the real titles file."""
+        self.mock_youtube.get_live_stream_info.return_value = {
+            "is_live": True,
+            "video_id": "vid_abc",
+            "title": "Old Title",
+        }
+        self.mock_youtube.update_video_title.return_value = None
+
+        self.core.update_title()
+
+        self.mock_youtube.update_video_title.assert_called_once_with("vid_abc", "Title 1")
+        self.assertEqual(self.core.current_title, "Title 1")
+        self.assertEqual(self.core.status_type, "success")
+
+    def test_update_title_archives_applied_title(self):
+        """Test that update_title records the used title in applied-titles.txt."""
+        self.mock_youtube.get_live_stream_info.return_value = {
+            "is_live": True,
+            "video_id": "vid_abc",
+            "title": "Old Title",
+        }
+        self.mock_youtube.update_video_title.return_value = None
+
+        self.core.update_title()
+
+        with open(os.path.join(self.temp_dir, "applied-titles.txt"), "r") as f:
+            content = f.read()
+        self.assertIn("Title 1", content)
+
+    def test_full_workflow_check_then_update(self):
+        """Test a complete check-then-update workflow."""
+        self.mock_youtube.get_live_stream_info.return_value = {
+            "is_live": True,
+            "video_id": "vid_abc",
+            "title": "Current Title",
+        }
+        self.mock_youtube.update_video_title.return_value = None
+
+        self.core.check_live_status()
+        self.assertTrue(self.core.is_live)
+
+        self.core.update_title()
+        self.assertEqual(self.core.status_type, "success")
+        self.mock_youtube.update_video_title.assert_called_once()
+
+    def test_status_integration_error_propagates(self):
+        """Test that API errors are captured and reflected in status."""
+        self.mock_youtube.get_live_stream_info.side_effect = YouTubeAPIError(
+            "Connection refused"
+        )
+
+        self.core.check_live_status()
+        self.assertEqual(self.core.status_type, "error")
+        self.assertIn("Error checking live status", self.core.status)
+
+
+if __name__ == "__main__":
+    unittest.main()

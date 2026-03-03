@@ -18,7 +18,6 @@ build/
 # PyInstaller
 #  Usually these files are written by a python installer
 *.manifest
-*.spec
 
 # Installer logs
 pip-log.txt

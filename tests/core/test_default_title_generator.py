@@ -1,69 +1,85 @@
+"""Tests for DefaultTitleGenerator."""
+
 import pytest
 from datetime import datetime
+from unittest.mock import patch
 import pytz
 from youtube_updater.core.default_title_generator import DefaultTitleGenerator
 
+PATCH_TARGET = "youtube_updater.core.default_title_generator.datetime"
+
+
 class TestDefaultTitleGenerator:
     """Test cases for DefaultTitleGenerator."""
-    
+
     @pytest.fixture
     def generator(self):
         """Create a DefaultTitleGenerator instance."""
         return DefaultTitleGenerator()
-    
-    def test_generate_title_weekday(self, generator, monkeypatch):
-        """Test title generation on a weekday."""
-        # Mock current time to a weekday (Monday) at 2 PM
-        mock_time = datetime(2024, 3, 18, 14, 0, 0, tzinfo=pytz.timezone("US/Eastern"))
-        monkeypatch.setattr("datetime.datetime", lambda *args, **kwargs: mock_time)
-        
-        title = generator.generate_title()
+
+    def _make_eastern_dt(self, year, month, day, hour, minute=0):
+        """Return a timezone-aware datetime in US/Eastern."""
+        est = pytz.timezone("US/Eastern")
+        return est.localize(datetime(year, month, day, hour, minute, 0))
+
+    def test_generate_title_weekday(self, generator):
+        """Test title generation on a weekday (Monday)."""
+        monday_2pm_est = self._make_eastern_dt(2024, 3, 18, 14)  # Monday
+
+        with patch(PATCH_TARGET) as mock_dt:
+            mock_dt.now.return_value = monday_2pm_est
+            title = generator.generate_title()
+
         assert title == "Monday, March 18, 2024 - Divine Liturgy"
-    
-    def test_generate_title_saturday_morning(self, generator, monkeypatch):
-        """Test title generation on Saturday morning."""
-        # Mock current time to Saturday at 10 AM
-        mock_time = datetime(2024, 3, 23, 10, 0, 0, tzinfo=pytz.timezone("US/Eastern"))
-        monkeypatch.setattr("datetime.datetime", lambda *args, **kwargs: mock_time)
-        
-        title = generator.generate_title()
+
+    def test_generate_title_saturday_morning(self, generator):
+        """Test title generation on Saturday morning (before 5 PM)."""
+        saturday_10am_est = self._make_eastern_dt(2024, 3, 23, 10)  # Saturday
+
+        with patch(PATCH_TARGET) as mock_dt:
+            mock_dt.now.return_value = saturday_10am_est
+            title = generator.generate_title()
+
         assert title == "Saturday, March 23, 2024 - Divine Liturgy"
-    
-    def test_generate_title_saturday_evening(self, generator, monkeypatch):
-        """Test title generation on Saturday evening."""
-        # Mock current time to Saturday at 6 PM
-        mock_time = datetime(2024, 3, 23, 18, 0, 0, tzinfo=pytz.timezone("US/Eastern"))
-        monkeypatch.setattr("datetime.datetime", lambda *args, **kwargs: mock_time)
-        
-        title = generator.generate_title()
+
+    def test_generate_title_saturday_evening(self, generator):
+        """Test title generation on Saturday evening (after 5 PM)."""
+        saturday_6pm_est = self._make_eastern_dt(2024, 3, 23, 18)  # Saturday at 6 PM
+
+        with patch(PATCH_TARGET) as mock_dt:
+            mock_dt.now.return_value = saturday_6pm_est
+            title = generator.generate_title()
+
         assert title == "Saturday, March 23, 2024 - Vespers and Midnight Praises"
-    
-    def test_generate_title_saturday_late_night(self, generator, monkeypatch):
-        """Test title generation on Saturday late night."""
-        # Mock current time to Saturday at 11:30 PM
-        mock_time = datetime(2024, 3, 23, 23, 30, 0, tzinfo=pytz.timezone("US/Eastern"))
-        monkeypatch.setattr("datetime.datetime", lambda *args, **kwargs: mock_time)
-        
-        title = generator.generate_title()
+
+    def test_generate_title_saturday_late_night(self, generator):
+        """Test title generation on Saturday late night (11:30 PM)."""
+        saturday_1130pm_est = self._make_eastern_dt(2024, 3, 23, 23, 30)
+
+        with patch(PATCH_TARGET) as mock_dt:
+            mock_dt.now.return_value = saturday_1130pm_est
+            title = generator.generate_title()
+
         assert title == "Saturday, March 23, 2024 - Vespers and Midnight Praises"
-    
-    def test_generate_title_saturday_after_midnight(self, generator, monkeypatch):
-        """Test title generation on Saturday after midnight."""
-        # Mock current time to Saturday at 12:30 AM
-        mock_time = datetime(2024, 3, 24, 0, 30, 0, tzinfo=pytz.timezone("US/Eastern"))
-        monkeypatch.setattr("datetime.datetime", lambda *args, **kwargs: mock_time)
-        
-        title = generator.generate_title()
+
+    def test_generate_title_saturday_after_midnight(self, generator):
+        """Test title generation after midnight Sunday (should be Divine Liturgy)."""
+        sunday_1230am_est = self._make_eastern_dt(2024, 3, 24, 0, 30)  # Sunday 12:30 AM
+
+        with patch(PATCH_TARGET) as mock_dt:
+            mock_dt.now.return_value = sunday_1230am_est
+            title = generator.generate_title()
+
         assert title == "Sunday, March 24, 2024 - Divine Liturgy"
-    
+
     def test_custom_timezone(self):
-        """Test title generation with a custom timezone."""
-        # Create generator with Pacific timezone
-        generator = DefaultTitleGenerator(timezone="US/Pacific")
-        
-        # Mock current time to Saturday at 6 PM Pacific (9 PM Eastern)
-        mock_time = datetime(2024, 3, 23, 21, 0, 0, tzinfo=pytz.timezone("US/Eastern"))
-        monkeypatch.setattr("datetime.datetime", lambda *args, **kwargs: mock_time)
-        
-        title = generator.generate_title()
-        assert title == "Saturday, March 23, 2024 - Vespers and Midnight Praises" 
+        """Test title generation with a custom timezone (US/Pacific)."""
+        pacific = pytz.timezone("US/Pacific")
+        saturday_6pm_pacific = pacific.localize(datetime(2024, 3, 23, 18, 0, 0))
+
+        with patch(PATCH_TARGET) as mock_dt:
+            mock_dt.now.return_value = saturday_6pm_pacific
+            generator = DefaultTitleGenerator(timezone="US/Pacific")
+            title = generator.generate_title()
+
+        assert title == "Saturday, March 23, 2024 - Vespers and Midnight Praises"
