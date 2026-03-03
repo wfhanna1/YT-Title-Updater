@@ -11,7 +11,7 @@
 #
 # NOTE: client_secrets.json and token.json are NOT bundled.
 # They live in the user data directory (platformdirs) and must be
-# set up once with:  python -m youtube_updater auth  (or auth_setup.py)
+# set up once with:  yt-title-updater auth
 
 a = Analysis(
     ['youtube_updater/__main__.py'],
@@ -25,7 +25,9 @@ a = Analysis(
         'google.auth.transport.requests',
         'google.oauth2.credentials',
         'platformdirs',
+        'tzdata',
         'urllib3',
+        'zoneinfo',
     ],
     hookspath=[],
     hooksconfig={},

@@ -1,18 +1,18 @@
 from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo
 from typing import Optional
 from .interfaces import ITitleGenerator
 
 class DefaultTitleGenerator(ITitleGenerator):
     """Generates default titles based on current date and time."""
-    
+
     def __init__(self, timezone: str = "US/Eastern"):
         """Initialize the title generator.
-        
+
         Args:
             timezone: Timezone to use for time-based decisions (default: US/Eastern)
         """
-        self.timezone = pytz.timezone(timezone)
+        self.timezone = ZoneInfo(timezone)
     
     def generate_title(self) -> str:
         """Generate a title based on current date and time.

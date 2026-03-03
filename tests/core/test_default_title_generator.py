@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime
 from unittest.mock import patch
-import pytz
+from zoneinfo import ZoneInfo
 from youtube_updater.core.default_title_generator import DefaultTitleGenerator
 
 PATCH_TARGET = "youtube_updater.core.default_title_generator.datetime"
@@ -19,8 +19,7 @@ class TestDefaultTitleGenerator:
 
     def _make_eastern_dt(self, year, month, day, hour, minute=0):
         """Return a timezone-aware datetime in US/Eastern."""
-        est = pytz.timezone("US/Eastern")
-        return est.localize(datetime(year, month, day, hour, minute, 0))
+        return datetime(year, month, day, hour, minute, 0, tzinfo=ZoneInfo("US/Eastern"))
 
     def test_generate_title_weekday(self, generator):
         """Test title generation on a weekday (Monday)."""
@@ -74,8 +73,7 @@ class TestDefaultTitleGenerator:
 
     def test_custom_timezone(self):
         """Test title generation with a custom timezone (US/Pacific)."""
-        pacific = pytz.timezone("US/Pacific")
-        saturday_6pm_pacific = pacific.localize(datetime(2024, 3, 23, 18, 0, 0))
+        saturday_6pm_pacific = datetime(2024, 3, 23, 18, 0, 0, tzinfo=ZoneInfo("US/Pacific"))
 
         with patch(PATCH_TARGET) as mock_dt:
             mock_dt.now.return_value = saturday_6pm_pacific
