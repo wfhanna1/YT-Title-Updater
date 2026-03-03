@@ -35,9 +35,7 @@ class AuthManager:
             if not creds or not creds.valid:
                 creds = self._refresh_or_authenticate(creds)
             return creds
-
-        except AuthenticationError:
-            raise
+            
         except Exception as e:
             raise AuthenticationError(f"Authentication failed: {str(e)}") from e
 
