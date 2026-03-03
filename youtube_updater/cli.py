@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from .core.factory import ComponentFactory
+from .core.auth_manager import AuthManager
 
 # Polling interval used by the --wait retry loop (seconds).
 _WAIT_POLL_INTERVAL = 10
@@ -39,6 +40,8 @@ class YouTubeUpdaterCLI:
             return self._handle_update(wait=args.wait, wait_timeout=args.wait_timeout)
         elif args.command == "status":
             return self._handle_status()
+        elif args.command == "auth":
+            return self._handle_auth()
         return 1
 
     def _handle_update(self, wait: bool = False, wait_timeout: int = 90) -> int:
@@ -83,6 +86,38 @@ class YouTubeUpdaterCLI:
 
         except Exception as e:
             print(f"Error updating title: {str(e)}", file=sys.stderr)
+            return 1
+
+    def _handle_auth(self) -> int:
+        """Handle the auth subcommand.
+
+        Guides the user through placing client_secrets.json in the config
+        directory, then runs the OAuth browser flow to produce token.json.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        config = self.core.config
+        config_dir = str(config.config_dir)
+        secrets_path = config.get_client_secrets_path()
+        print(f"Config directory: {config_dir}")
+
+        if not config.ensure_client_secrets():
+            print(
+                f"client_secrets.json not found.\n"
+                f"Download it from the Google Cloud Console and copy it to:\n"
+                f"  {secrets_path}"
+            )
+            return 1
+
+        try:
+            token_path = config.get_file_paths()["token_path"]
+            auth = AuthManager(secrets_path, token_path)
+            auth.get_credentials()
+            print("Authentication successful. token.json saved.")
+            return 0
+        except Exception as e:
+            print(f"Authentication failed: {e}", file=sys.stderr)
             return 1
 
     def _handle_status(self) -> int:
@@ -145,6 +180,12 @@ def main():
     subparsers.add_parser(
         "status",
         help="Check the current live stream status"
+    )
+
+    # Auth command
+    subparsers.add_parser(
+        "auth",
+        help="Authorise the YouTube account (run once after placing client_secrets.json)"
     )
 
     args = parser.parse_args()

@@ -187,3 +187,64 @@ class TestStatusCommand(TestCase):
         result = cli.run(args)
 
         self.assertEqual(result, 0)
+
+
+class TestAuthCommand(TestCase):
+    """auth subcommand must guide setup and run the OAuth flow."""
+
+    def _make_cli_with_config(self, mock_create_core, secrets_exist=True):
+        config = MagicMock()
+        config.config_dir = "/fake/config"
+        config.get_client_secrets_path.return_value = "/fake/config/client_secrets.json"
+        config.get_file_paths.return_value = {"token_path": "/fake/config/token.json"}
+        config.ensure_client_secrets.return_value = secrets_exist
+
+        core = MagicMock()
+        core.config = config
+        mock_create_core.return_value = core
+        return YouTubeUpdaterCLI()
+
+    @patch("youtube_updater.cli.ComponentFactory.create_core")
+    def test_auth_no_client_secrets_returns_1(self, mock_create_core):
+        """Exits 1 and prints instructions when client_secrets.json is absent."""
+        cli = self._make_cli_with_config(mock_create_core, secrets_exist=False)
+        args = argparse.Namespace(command="auth")
+        result = cli.run(args)
+        self.assertEqual(result, 1)
+
+    @patch("youtube_updater.cli.ComponentFactory.create_core")
+    def test_auth_no_client_secrets_prints_path(self, mock_create_core):
+        """Output must contain the path where client_secrets.json should be placed."""
+        cli = self._make_cli_with_config(mock_create_core, secrets_exist=False)
+        args = argparse.Namespace(command="auth")
+        with mock.patch("builtins.print") as mock_print:
+            cli.run(args)
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        self.assertIn("client_secrets.json", printed)
+        self.assertIn("/fake/config", printed)
+
+    @patch("youtube_updater.cli.AuthManager")
+    @patch("youtube_updater.cli.ComponentFactory.create_core")
+    def test_auth_with_secrets_calls_get_credentials(self, mock_create_core, mock_auth_cls):
+        """When client_secrets.json exists, get_credentials() is called."""
+        cli = self._make_cli_with_config(mock_create_core, secrets_exist=True)
+        mock_auth_instance = MagicMock()
+        mock_auth_cls.return_value = mock_auth_instance
+
+        args = argparse.Namespace(command="auth")
+        result = cli.run(args)
+
+        self.assertEqual(result, 0)
+        mock_auth_instance.get_credentials.assert_called_once()
+
+    @patch("youtube_updater.cli.AuthManager")
+    @patch("youtube_updater.cli.ComponentFactory.create_core")
+    def test_auth_exception_returns_1(self, mock_create_core, mock_auth_cls):
+        """An exception during the OAuth flow returns exit code 1."""
+        cli = self._make_cli_with_config(mock_create_core, secrets_exist=True)
+        mock_auth_cls.return_value.get_credentials.side_effect = Exception("OAuth failed")
+
+        args = argparse.Namespace(command="auth")
+        result = cli.run(args)
+
+        self.assertEqual(result, 1)

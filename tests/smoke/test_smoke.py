@@ -46,6 +46,7 @@ class TestCLIEntryPoint:
         assert r.returncode == 0
         assert "update" in r.stdout
         assert "status" in r.stdout
+        assert "auth" in r.stdout
 
     def test_update_help_exits_zero(self):
         r = _run("update", "--help")
@@ -56,6 +57,15 @@ class TestCLIEntryPoint:
     def test_status_help_exits_zero(self):
         r = _run("status", "--help")
         assert r.returncode == 0
+
+    def test_auth_help_exits_zero(self):
+        r = _run("auth", "--help")
+        assert r.returncode == 0
+
+    def test_auth_without_client_secrets_exits_nonzero(self, tmp_path):
+        r = _run("auth", config_dir=tmp_path)
+        assert r.returncode != 0
+        assert "client_secrets.json" in r.stdout
 
     def test_no_subcommand_exits_nonzero(self):
         r = _run()
