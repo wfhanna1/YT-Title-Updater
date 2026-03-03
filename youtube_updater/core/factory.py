@@ -37,16 +37,21 @@ class ComponentFactory:
             file_paths["history_log"]
         )
         
-        # Create auth manager and YouTube client if client secrets exist
+        # Create auth manager and YouTube client if client secrets exist.
+        # If credentials are invalid or auth fails, fall back to None so the
+        # rest of the CLI (status, auth) can still run and report the problem.
         auth_manager = None
         youtube_client = None
-        
+
         if config_manager.ensure_client_secrets():
             auth_manager = AuthManager(
                 config_manager.get_client_secrets_path(),
                 file_paths["token_path"]
             )
-            youtube_client = YouTubeClient(auth_manager.get_credentials())
+            try:
+                youtube_client = YouTubeClient(auth_manager.get_credentials())
+            except Exception:
+                youtube_client = None
         
         # Create and return core
         from . import YouTubeUpdaterCore

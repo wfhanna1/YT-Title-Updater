@@ -77,7 +77,7 @@ Copy the file there, then run `yt-title-updater auth` again. A browser window wi
 | OS | Path |
 |---|---|
 | Windows | `%APPDATA%\YTTitleUpdater\YTTitleUpdater\` |
-| macOS | `~/Library/Application Support/YTTitleUpdater/YTTitleUpdater/` |
+| macOS | `~/Library/Application Support/YTTitleUpdater/` |
 
 ### 3. Add your stream titles
 
