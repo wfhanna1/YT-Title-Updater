@@ -1,125 +1,171 @@
 # YouTube Live Title Updater
 
-This app automatically updates your live stream title on YouTube using a list of titles from a file. It provides a user-friendly GUI interface for managing your stream titles and monitoring your live status.
+A command-line tool that automatically updates your YouTube live stream title when you go live in OBS. Titles are read from a plain text file, rotated after each use, and archived so you never repeat one by accident.
 
 ---
 
-## 🖥️ Features
+## How It Works
 
-- **Real-time Title Management**
-  - View current and next stream titles
-  - Edit titles list through the built-in text editor
-  - Automatic title rotation after each update
-  - Title archiving to track used titles
-
-- **Live Status Monitoring**
-  - Real-time detection of live stream status
-  - Automatic title updates when going live
-  - Manual title update option
-  - Status indicators for connection and updates
-
-- **User Interface**
-  - Clean, modern GUI design
-  - Current and next title display
-  - Status messages with color coding
-  - Quick access to configuration files
-  - Menu bar integration (when built as app)
-
-- **Configuration Management**
-  - Easy access to titles file
-  - Configurable title rotation
-  - Automatic backup of used titles
-  - Detailed history logging
+1. You maintain a `titles.txt` file with one title per line.
+2. When you start streaming in OBS, the tool waits until YouTube reports the broadcast as active (typically 30-60 seconds), applies the first title in the list, then moves it to the end so the next stream gets a fresh title.
+3. Every applied title is logged to `applied-titles.txt` and `history.log`.
 
 ---
 
-## ✅ Setup Guide
+## Installation
 
-### 1. **Enable YouTube API & Get Credentials**
-- Go to: https://console.developers.google.com/
-- Create a project and enable **YouTube Data API v3**
-- Go to **Credentials** > Create **OAuth client ID** > Choose **Desktop App**
-- Download the JSON file and **replace** the `client_secrets.json` in this folder
+### Requirements
 
-### 2. **Authorize Access to Your YouTube**
-In Terminal, run:
+- Python 3.9 or later (for building only -- the binary runs standalone)
+- [PyInstaller](https://pyinstaller.org)
+
+### Build the binary
+
 ```bash
-cd ~/Documents/yt_title_updater
-python3 auth_setup.py
-```
-- This opens a browser for you to log in and authorize
-- It generates `token.pickle` (used for title updates)
+# Clone the repo
+git clone https://github.com/your-org/YT-Title-Updater.git
+cd YT-Title-Updater
 
-### 3. **Edit Your Stream Titles**
-Edit `titles.txt` to include your planned stream titles (one per line). The first unused title is used.
+# Install dependencies
+pip install -r requirements.txt
+pip install pyinstaller
 
-### 4. **Run the App**
-To test run:
-```bash
-python3 youtube_title_updater.py
+# Build
+pyinstaller yt-title-updater.spec
 ```
 
-To build it into a menu bar app:
+Output: `dist/yt-title-updater` (macOS / Linux) or `dist/yt-title-updater.exe` (Windows).
+
+Copy the binary to a permanent location on your PATH, for example:
+
+- **macOS**: `cp dist/yt-title-updater /usr/local/bin/`
+- **Windows**: copy `dist\yt-title-updater.exe` to `C:\Tools\` and add that folder to your PATH, or set the full path directly in the OBS script settings.
+
+---
+
+## First-Time Setup
+
+### 1. Create YouTube API credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a project and enable the **YouTube Data API v3**.
+3. Go to **Credentials > Create credentials > OAuth client ID**.
+4. Choose **Desktop app**, download the JSON file.
+5. Rename it `client_secrets.json`.
+
+### 2. Place client_secrets.json in the config directory
+
+Run the auth command to find out where the config directory is:
+
 ```bash
-pip3 install py2app
-python3 setup.py py2app
+yt-title-updater auth
+```
+
+If `client_secrets.json` is missing, the output will tell you the exact path to copy it to:
+
+```
+Config directory: C:\Users\YourName\AppData\Roaming\YTTitleUpdater\YTTitleUpdater
+client_secrets.json not found.
+Download it from the Google Cloud Console and copy it to:
+  C:\Users\YourName\AppData\Roaming\YTTitleUpdater\YTTitleUpdater\client_secrets.json
+```
+
+Copy the file there, then run `yt-title-updater auth` again. A browser window will open for you to log in and authorize access to your YouTube account. On success, `token.json` is saved to the same directory and you will not need to repeat this step.
+
+**Config directory locations:**
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\YTTitleUpdater\YTTitleUpdater\` |
+| macOS | `~/Library/Application Support/YTTitleUpdater/YTTitleUpdater/` |
+
+### 3. Add your stream titles
+
+Open `titles.txt` in the config directory and add your planned titles, one per line:
+
+```
+Episode 12 - Getting Started With Rust
+Episode 13 - Ownership and Borrowing
+Episode 14 - Lifetimes Explained
+```
+
+The first line is always used next. After each successful update it moves to the end of the file.
+
+---
+
+## Usage
+
+```bash
+# Check if the channel is live and show the next title
+yt-title-updater status
+
+# Update the title once (exits 1 if not live)
+yt-title-updater update
+
+# Wait up to 90 seconds for the stream to go live, then update
+yt-title-updater update --wait
+
+# Wait up to 2 minutes
+yt-title-updater update --wait --wait-timeout 120
+
+# Run OAuth setup (first time only)
+yt-title-updater auth
+
+# Use a custom config directory
+yt-title-updater --config-dir /path/to/config status
 ```
 
 ---
 
-## 📁 File Structure
-- `youtube_title_updater.py`: Main application entry point
-- `youtube_updater/`: Core application package
-  - `core.py`: Core functionality and YouTube API interaction
-  - `gui.py`: GUI implementation
-- `auth_setup.py`: Authentication handler
-- `titles.txt`: Your stream titles
-- `applied-titles.txt`: Archive of used titles
-- `history.log`: Detailed update history
-- `client_secrets.json`: Your YouTube API credentials
+## OBS Integration
+
+The Lua script in `obs_scripts/youtube_title_updater.lua` hooks into OBS and runs the title update automatically when you start streaming.
+
+### Setup
+
+1. In OBS, go to **Tools > Scripts**.
+2. Click **+** and select `obs_scripts/youtube_title_updater.lua`.
+3. In the script settings:
+   - **Binary Path**: full path to `yt-title-updater.exe` (Windows) or `yt-title-updater` (macOS).
+   - **Wait Timeout**: seconds to wait for the broadcast to become active (default: 90). Increase if your stream takes longer to appear on YouTube.
+   - **Config Directory**: leave blank to use the default, or enter a custom path if you used `--config-dir` during setup.
+
+### How it fires
+
+When OBS starts streaming (`OBS_FRONTEND_EVENT_STREAMING_STARTED`), the script runs:
+
+```
+yt-title-updater update --wait --wait-timeout <N>
+```
+
+in the background. OBS is not blocked. The tool polls every 10 seconds until YouTube marks the broadcast as active, then applies the next title from your list.
 
 ---
 
-## 🎯 How It Works
+## File Reference
 
-1. **Title Management**
-   - Titles are read from `titles.txt`
-   - First unused title is selected as next title
-   - After updating, used title is moved to `applied-titles.txt`
-   - Next title in list becomes current title
+All files are in the config directory (see paths above).
 
-2. **Live Detection**
-   - App continuously monitors your YouTube channel
-   - Automatically detects when you go live
-   - Updates status in real-time
-
-3. **Title Updates**
-   - Manual update through "Update Title" button
-   - Automatic updates when going live
-   - All changes logged in `history.log`
-
-4. **Configuration**
-   - Access config files through menu options
-   - Edit titles directly through built-in editor
-   - View history and applied titles
+| File | Purpose |
+|---|---|
+| `client_secrets.json` | YouTube OAuth credentials (you provide this) |
+| `token.json` | OAuth token (generated by `auth`, do not share) |
+| `titles.txt` | Your upcoming stream titles, one per line |
+| `applied-titles.txt` | Titles that have been applied |
+| `history.log` | Timestamped log of every title update |
 
 ---
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
-If you encounter issues:
-1. Check your YouTube API credentials
-2. Verify internet connection
-3. Ensure you're logged into the correct YouTube account
-4. Check the history.log for error messages
-5. Verify file permissions in the config directory
+**`auth` command opens a browser but shows an error**
+Make sure the OAuth client ID type is **Desktop app**, not Web app.
 
----
+**`update` exits immediately with "Not currently live streaming"**
+YouTube's API takes 30-60 seconds to report a new broadcast as active. Use `--wait` to have the tool retry automatically.
 
-## 📝 Notes
-- The app requires an active internet connection
-- YouTube API has rate limits - be mindful of update frequency
-- All changes are logged for tracking and debugging
-- The app can be run as a regular GUI or menu bar app
+**Title is not updating even though the stream is live**
+Run `yt-title-updater status` to check whether the YouTube client is initialized. If it prints `not initialized`, `client_secrets.json` is missing or `token.json` is expired -- re-run `yt-title-updater auth`.
 
-
+**`titles.txt` is empty / "No titles available"**
+Add at least one title to `titles.txt` in the config directory. If the file is empty the tool has no title to apply.
