@@ -32,6 +32,17 @@ local function is_windows()
     return package.config:sub(1, 1) == "\\"
 end
 
+local function get_log_path()
+    -- Place the log next to the binary so it is easy to find.
+    if binary_path == "" then return nil end
+
+    local dir = binary_path:match("^(.*)[/\\]")  -- parent directory
+    if dir then
+        return dir .. (is_windows() and "\\" or "/") .. "yt-title-updater.log"
+    end
+    return nil
+end
+
 local function run_updater()
     if binary_path == "" then
         obs.script_log(obs.LOG_WARNING,
@@ -50,13 +61,22 @@ local function run_updater()
 
     obs.script_log(obs.LOG_INFO, "Running: " .. cmd)
 
+    local log_path = get_log_path()
+
     -- Launch non-blocking so OBS is not frozen.
+    -- Redirect stdout+stderr to a log file for diagnostics.
     if is_windows() then
-        -- start /B runs the process without a visible window and returns immediately.
-        os.execute('start /B "" ' .. cmd)
+        if log_path then
+            os.execute('start /B "" ' .. cmd .. ' >> "' .. log_path .. '" 2>&1')
+        else
+            os.execute('start /B "" ' .. cmd)
+        end
     else
-        -- & runs the process in the background on macOS / Linux.
-        os.execute(cmd .. " > /dev/null 2>&1 &")
+        if log_path then
+            os.execute(cmd .. ' >> "' .. log_path .. '" 2>&1 &')
+        else
+            os.execute(cmd .. " &")
+        end
     end
 end
 

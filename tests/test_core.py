@@ -66,9 +66,10 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
             self.core.status_manager.set_status("Test message", "invalid_type")
 
     def test_check_live_status_no_youtube(self):
-        """Test check_live_status when YouTube client is not initialized."""
+        """Test check_live_status returns None when YouTube client is not initialized."""
         core = _build_core(youtube_client=None)
-        core.check_live_status()
+        result = core.check_live_status()
+        self.assertIsNone(result)
         self.assertEqual(core.status, "YouTube client not initialized")
         self.assertEqual(core.status_type, "error")
 
@@ -117,9 +118,10 @@ class TestYouTubeUpdaterCore(unittest.TestCase):
         self.assertEqual(self.core.status_type, "warning")
 
     def test_update_title_no_client(self):
-        """Test update_title when YouTube client is not initialized."""
+        """Test update_title raises when YouTube client is not initialized."""
         core = _build_core(youtube_client=None)
-        core.update_title()
+        with self.assertRaises(Exception):
+            core.update_title()
         self.assertEqual(core.status, "YouTube client not initialized")
         self.assertEqual(core.status_type, "error")
 

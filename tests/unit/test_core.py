@@ -59,9 +59,10 @@ class TestCheckLiveStatus(unittest.TestCase):
     """Test YouTubeUpdaterCore.check_live_status."""
 
     def test_check_live_status_no_youtube_client(self):
-        """Test check_live_status sets error status when no client."""
+        """Test check_live_status returns None and sets error when no client."""
         core = _make_core(youtube_client=None)
-        core.check_live_status()
+        result = core.check_live_status()
+        self.assertIsNone(result)
         self.assertEqual(core.status, "YouTube client not initialized")
         self.assertEqual(core.status_type, "error")
         self.assertFalse(core.is_live)
@@ -92,23 +93,23 @@ class TestCheckLiveStatus(unittest.TestCase):
         self.assertEqual(core.status, "Channel is not live")
         self.assertEqual(core.status_type, "info")
 
-    def test_check_live_status_api_exception_sets_error(self):
-        """Test check_live_status catches exceptions and sets error status."""
+    def test_check_live_status_api_exception_propagates(self):
+        """Test check_live_status lets API exceptions propagate."""
         mock_client = MagicMock()
         mock_client.get_live_stream_info.side_effect = YouTubeAPIError("API failure")
         core = _make_core(youtube_client=mock_client)
-        core.check_live_status()
-        self.assertIn("Error checking live status", core.status)
-        self.assertEqual(core.status_type, "error")
+        with self.assertRaises(YouTubeAPIError):
+            core.check_live_status()
 
 
 class TestUpdateTitle(unittest.TestCase):
     """Test YouTubeUpdaterCore.update_title."""
 
     def test_update_title_no_youtube_client(self):
-        """Test update_title sets error status when no client."""
+        """Test update_title raises when no client."""
         core = _make_core(youtube_client=None)
-        core.update_title()
+        with self.assertRaises(Exception):
+            core.update_title()
         self.assertEqual(core.status, "YouTube client not initialized")
         self.assertEqual(core.status_type, "error")
 
@@ -122,7 +123,7 @@ class TestUpdateTitle(unittest.TestCase):
         self.assertEqual(core.status_type, "warning")
 
     def test_update_title_no_titles_available(self):
-        """Test update_title sets warning when title manager returns None."""
+        """Test update_title raises when title manager returns None."""
         mock_client = MagicMock()
         mock_client.get_live_stream_info.return_value = {
             "is_live": True,
@@ -132,7 +133,8 @@ class TestUpdateTitle(unittest.TestCase):
         mock_title_manager = MagicMock()
         mock_title_manager.get_next_title.return_value = None
         core = _make_core(youtube_client=mock_client, title_manager=mock_title_manager)
-        core.update_title()
+        with self.assertRaises(Exception):
+            core.update_title()
         self.assertIn("No titles available", core.status)
         self.assertEqual(core.status_type, "warning")
 
@@ -158,14 +160,13 @@ class TestUpdateTitle(unittest.TestCase):
         self.assertEqual(core.status, "Title updated to: New Title")
         self.assertEqual(core.status_type, "success")
 
-    def test_update_title_api_error_sets_error_status(self):
-        """Test update_title catches exceptions and sets error status."""
+    def test_update_title_api_error_propagates(self):
+        """Test update_title lets API exceptions propagate."""
         mock_client = MagicMock()
         mock_client.get_live_stream_info.side_effect = YouTubeAPIError("API down")
         core = _make_core(youtube_client=mock_client)
-        core.update_title()
-        self.assertIn("Error updating title", core.status)
-        self.assertEqual(core.status_type, "error")
+        with self.assertRaises(YouTubeAPIError):
+            core.update_title()
 
 
 class TestStatusProperty(unittest.TestCase):

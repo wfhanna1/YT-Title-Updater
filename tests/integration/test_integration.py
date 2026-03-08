@@ -132,14 +132,13 @@ class TestCoreIntegration(unittest.TestCase):
         self.mock_youtube.update_video_title.assert_called_once()
 
     def test_status_integration_error_propagates(self):
-        """Test that API errors are captured and reflected in status."""
+        """Test that API errors propagate as exceptions."""
         self.mock_youtube.get_live_stream_info.side_effect = YouTubeAPIError(
             "Connection refused"
         )
 
-        self.core.check_live_status()
-        self.assertEqual(self.core.status_type, "error")
-        self.assertIn("Error checking live status", self.core.status)
+        with self.assertRaises(YouTubeAPIError):
+            self.core.check_live_status()
 
 
 if __name__ == "__main__":
