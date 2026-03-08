@@ -108,7 +108,7 @@ function script_properties()
         "Binary Path",
         obs.OBS_PATH_FILE,
         -- File filter: show the binary for the current OS
-        is_windows() and "Executable (*.exe)" or "All files (*.*)",
+        is_windows() and "Executable (*.exe)" or "All files (*)",
         nil
     )
 
