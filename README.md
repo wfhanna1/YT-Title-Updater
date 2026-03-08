@@ -16,30 +16,83 @@ A command-line tool that automatically updates your YouTube live stream title wh
 
 ### Requirements
 
-- Python 3.9 or later (for building only -- the binary runs standalone)
-- [PyInstaller](https://pyinstaller.org)
+- Python 3.9 or later (for building only -- the compiled binary runs standalone)
+- [PyInstaller](https://pyinstaller.org) 5.0+
 
-### Build the binary
+> **Important:** You must build on the same OS you plan to run the binary on.
+> PyInstaller does not cross-compile -- a Windows `.exe` must be built on
+> Windows, a macOS binary must be built on macOS.
 
-```bash
-# Clone the repo
-git clone https://github.com/your-org/YT-Title-Updater.git
+### Building on Windows
+
+Open **Command Prompt** or **PowerShell**:
+
+```bat
+:: Clone the repo
+git clone https://github.com/wfhanna1/YT-Title-Updater.git
 cd YT-Title-Updater
 
-# Install dependencies
-pip install -r requirements.txt
-pip install pyinstaller
+:: Create a virtual environment (recommended)
+python -m venv venv
+venv\Scripts\activate
 
-# Build
+:: Install dependencies
+pip install -r requirements.txt
+
+:: Build the binary
 pyinstaller yt-title-updater.spec
 ```
 
-Output: `dist/yt-title-updater` (macOS / Linux) or `dist/yt-title-updater.exe` (Windows).
+Output: `dist\yt-title-updater.exe`
 
-Copy the binary to a permanent location on your PATH, for example:
+Copy it to a permanent location, for example `C:\Tools\yt-title-updater.exe`.
+You can add `C:\Tools` to your system PATH, or point the OBS script directly
+to the full path.
 
-- **macOS**: `cp dist/yt-title-updater /usr/local/bin/`
-- **Windows**: copy `dist\yt-title-updater.exe` to `C:\Tools\` and add that folder to your PATH, or set the full path directly in the OBS script settings.
+### Building on macOS
+
+Open **Terminal**:
+
+```bash
+# Clone the repo
+git clone https://github.com/wfhanna1/YT-Title-Updater.git
+cd YT-Title-Updater
+
+# Create a virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Build the binary
+pyinstaller yt-title-updater.spec
+```
+
+Output: `dist/yt-title-updater`
+
+Copy it to a permanent location:
+
+```bash
+cp dist/yt-title-updater /usr/local/bin/
+```
+
+> **macOS Gatekeeper note:** Because the binary is not signed, macOS may block
+> it the first time. Go to **System Settings > Privacy & Security** and click
+> **Allow Anyway**, or run:
+> ```bash
+> xattr -d com.apple.quarantine /usr/local/bin/yt-title-updater
+> ```
+
+### Verifying the build
+
+After building, confirm the binary works:
+
+```bash
+yt-title-updater --help
+```
+
+You should see the list of subcommands (`update`, `status`, `auth`).
 
 ---
 
@@ -167,5 +220,14 @@ YouTube's API takes 30-60 seconds to report a new broadcast as active. Use `--wa
 **Title is not updating even though the stream is live**
 Run `yt-title-updater status` to check whether the YouTube client is initialized. If it prints `not initialized`, `client_secrets.json` is missing or `token.json` is expired -- re-run `yt-title-updater auth`.
 
+**OBS starts streaming but the title does not change**
+Check the log file `yt-title-updater.log` in the same directory as the binary. It captures all output from the title update process. Common causes:
+- Binary path not set in the OBS script settings.
+- Expired or missing credentials -- re-run `yt-title-updater auth`.
+- `titles.txt` is empty -- add at least one title.
+
 **`titles.txt` is empty / "No titles available"**
 Add at least one title to `titles.txt` in the config directory. If the file is empty the tool has no title to apply.
+
+**macOS: "yt-title-updater" cannot be opened because the developer cannot be verified**
+See the Gatekeeper note in the macOS build instructions above.

@@ -110,9 +110,11 @@ class TestWaitFlag(TestCase):
             if call_count["n"] < 3:
                 core.is_live = False
                 core.current_title = "Not Live"
+                return {"is_live": False}
             else:
                 core.is_live = True
                 core.current_title = "Live Title"
+                return {"is_live": True, "video_id": "vid123", "title": "Live Title"}
 
         core.check_live_status.side_effect = side_effect_check
         core.is_live = False
@@ -163,6 +165,8 @@ class TestWaitFlag(TestCase):
     def test_no_wait_flag_exits_immediately(self, mock_create_core):
         """Without --wait, exits immediately with code 1 when not live."""
         core = _make_core_mock(is_live=False)
+        # check_live_status must return a stream_info dict (not-live case)
+        core.check_live_status.return_value = {"is_live": False}
         mock_create_core.return_value = core
 
         cli = YouTubeUpdaterCLI()
@@ -172,6 +176,21 @@ class TestWaitFlag(TestCase):
         self.assertEqual(result, 1)
         # check_live_status called once, no retries
         core.check_live_status.assert_called_once()
+
+    @patch("youtube_updater.cli.ComponentFactory.create_core")
+    def test_no_wait_api_error_exits_with_1(self, mock_create_core):
+        """Without --wait, an API error exits immediately with code 1."""
+        from youtube_updater.exceptions.custom_exceptions import YouTubeAPIError
+
+        core = _make_core_mock(is_live=False)
+        core.check_live_status.side_effect = YouTubeAPIError("Auth expired")
+        mock_create_core.return_value = core
+
+        cli = YouTubeUpdaterCLI()
+        args = _make_args(command="update", wait=False)
+        result = cli.run(args)
+
+        self.assertEqual(result, 1)
 
 
 class TestStatusCommand(TestCase):

@@ -70,27 +70,29 @@ class YouTubeUpdaterCore:
             Optional[Dict[str, Any]]: The raw stream_info dict from the YouTube
             client if the client is available, or None otherwise.  Callers may
             pass this dict directly to update_title() to avoid a second API call.
+
+        Raises:
+            Exception: On API / network failures so that callers (e.g. the
+                CLI polling loop) can distinguish transient errors from a
+                simple "not live yet" state.
         """
-        try:
-            if not self.youtube_client:
-                self.status_manager.set_status("YouTube client not initialized", "error")
-                return None
-
-            stream_info = self.youtube_client.get_live_stream_info()
-            self.is_live = stream_info["is_live"]
-
-            if self.is_live:
-                self.current_title = stream_info["title"]
-                self.status_manager.set_status("Channel is live", "success")
-            else:
-                self.current_title = "Not Live"
-                self.status_manager.set_status("Channel is not live", "info")
-
-            return stream_info
-
-        except Exception as e:
-            self.status_manager.set_status(f"Error checking live status: {str(e)}", "error")
+        if not self.youtube_client:
+            self.status_manager.set_status("YouTube client not initialized", "error")
             return None
+
+        # Let API / network errors propagate so the caller can log them and
+        # decide whether to retry or abort.
+        stream_info = self.youtube_client.get_live_stream_info()
+        self.is_live = stream_info["is_live"]
+
+        if self.is_live:
+            self.current_title = stream_info["title"]
+            self.status_manager.set_status("Channel is live", "success")
+        else:
+            self.current_title = "Not Live"
+            self.status_manager.set_status("Channel is not live", "info")
+
+        return stream_info
 
     def update_title(self, stream_info: Optional[Dict[str, Any]] = None) -> None:
         """Update the title of the current live stream.
@@ -101,39 +103,40 @@ class YouTubeUpdaterCore:
                 get_live_stream_info() call is skipped, eliminating the redundant
                 API round-trip that would otherwise occur when the caller has
                 already called check_live_status().
+
+        Raises:
+            YouTubeUpdaterError: If the YouTube client is not initialized or
+                no titles are available.
+            YouTubeAPIError (or subclass): On API / network failures.
         """
-        try:
-            if not self.youtube_client:
-                self.status_manager.set_status("YouTube client not initialized", "error")
-                return
+        if not self.youtube_client:
+            self.status_manager.set_status("YouTube client not initialized", "error")
+            raise YouTubeUpdaterError("YouTube client not initialized")
 
-            # Use the provided stream_info to avoid a second API call when the
-            # caller has already fetched it via check_live_status().
-            if stream_info is None:
-                stream_info = self.youtube_client.get_live_stream_info()
+        # Use the provided stream_info to avoid a second API call when the
+        # caller has already fetched it via check_live_status().
+        if stream_info is None:
+            stream_info = self.youtube_client.get_live_stream_info()
 
-            if not stream_info["is_live"]:
-                self.status_manager.set_status("Channel is not live", "warning")
-                return
+        if not stream_info["is_live"]:
+            self.status_manager.set_status("Channel is not live", "warning")
+            return
 
-            # Get next title and update
-            new_title = self.title_manager.get_next_title()
-            if not new_title:
-                self.status_manager.set_status("No titles available to update.", "warning")
-                return
+        # Get next title and update
+        new_title = self.title_manager.get_next_title()
+        if not new_title:
+            self.status_manager.set_status("No titles available to update.", "warning")
+            raise YouTubeUpdaterError("No titles available to update.")
 
-            # Update the title using the video_id from the stream info
-            self.youtube_client.update_video_title(stream_info["video_id"], new_title)
+        # Update the title using the video_id from the stream info
+        self.youtube_client.update_video_title(stream_info["video_id"], new_title)
 
-            # Archive the used title
-            self.title_manager.archive_title(new_title)
+        # Archive the used title
+        self.title_manager.archive_title(new_title)
 
-            # Update current title
-            self.current_title = new_title
-            self.status_manager.set_status(f"Title updated to: {new_title}", "success")
-
-        except Exception as e:
-            self.status_manager.set_status(f"Error updating title: {str(e)}", "error")
+        # Update current title
+        self.current_title = new_title
+        self.status_manager.set_status(f"Title updated to: {new_title}", "success")
 
     def get_next_title(self) -> str:
         """Get the next title in the rotation (rotates the file).

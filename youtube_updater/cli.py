@@ -52,7 +52,8 @@ class YouTubeUpdaterCLI:
         second API call.
 
         When wait=True, polls every _WAIT_POLL_INTERVAL seconds until the
-        stream is live or wait_timeout seconds have elapsed.
+        stream is live or wait_timeout seconds have elapsed.  Transient API
+        errors are printed but retried; persistent errors eventually time out.
 
         Args:
             wait: When True, retry until live or timeout
@@ -61,32 +62,60 @@ class YouTubeUpdaterCLI:
         Returns:
             int: Exit code (0 success, 1 failure)
         """
-        try:
-            deadline = time.monotonic() + wait_timeout
+        deadline = time.monotonic() + wait_timeout
+        last_error: Optional[str] = None
 
-            while True:
+        while True:
+            # -- Check live status ----------------------------------------
+            try:
                 stream_info = self.core.check_live_status()
-                if self.core.is_live:
-                    # Pass the already-fetched stream_info to skip the second
-                    # get_live_stream_info() call inside update_title().
+            except Exception as e:
+                last_error = str(e)
+                stream_info = None
+                # In non-wait mode, fail immediately on API errors.
+                if not wait:
+                    print(f"Error checking live status: {last_error}", file=sys.stderr)
+                    return 1
+
+            # -- No YouTube client (missing credentials) – fail fast --------
+            if stream_info is None and last_error is None:
+                print(
+                    f"Error: {self.core.status}",
+                    file=sys.stderr,
+                )
+                return 1
+
+            # -- If live, update the title --------------------------------
+            if stream_info is not None and self.core.is_live:
+                try:
                     self.core.update_title(stream_info=stream_info)
                     print(f"Title updated successfully: {self.core.current_title}")
                     return 0
-
-                elapsed = int(wait_timeout - (deadline - time.monotonic()))
-                if not wait or time.monotonic() >= deadline:
-                    print("Not currently live streaming")
+                except Exception as e:
+                    print(f"Error updating title: {str(e)}", file=sys.stderr)
                     return 1
 
+            # -- Not live (or transient error) – maybe retry --------------
+            elapsed = int(wait_timeout - (deadline - time.monotonic()))
+            if not wait or time.monotonic() >= deadline:
+                if last_error:
+                    print(f"Timed out. Last error: {last_error}", file=sys.stderr)
+                else:
+                    print("Not currently live streaming")
+                return 1
+
+            if last_error:
+                print(
+                    f"Error: {last_error} — retrying in {_WAIT_POLL_INTERVAL}s"
+                    f" ({elapsed}/{wait_timeout}s elapsed)"
+                )
+                last_error = None
+            else:
                 print(
                     f"Not live, retrying in {_WAIT_POLL_INTERVAL} seconds..."
                     f" ({elapsed}/{wait_timeout}s elapsed)"
                 )
-                time.sleep(_WAIT_POLL_INTERVAL)
-
-        except Exception as e:
-            print(f"Error updating title: {str(e)}", file=sys.stderr)
-            return 1
+            time.sleep(_WAIT_POLL_INTERVAL)
 
     def _handle_auth(self) -> int:
         """Handle the auth subcommand.
