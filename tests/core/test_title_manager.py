@@ -4,7 +4,7 @@ import pytest
 import os
 from datetime import datetime
 from unittest.mock import patch
-import pytz
+from zoneinfo import ZoneInfo
 from youtube_updater.core.title_manager import TitleManager
 from youtube_updater.core.default_title_generator import DefaultTitleGenerator
 
@@ -38,8 +38,8 @@ class TestTitleManager:
 
     def _make_eastern_dt(self, year, month, day, hour, minute=0):
         """Return a timezone-aware datetime in US/Eastern."""
-        est = pytz.timezone("US/Eastern")
-        return est.localize(datetime(year, month, day, hour, minute, 0))
+        est = ZoneInfo("US/Eastern")
+        return datetime(year, month, day, hour, minute, 0, tzinfo=est)
 
     def test_get_next_title_with_empty_file(self, title_manager):
         """Test getting next title when titles file is empty uses default generator."""
