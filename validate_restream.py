@@ -175,6 +175,13 @@ def main():
             platform = ch.get("platform", "unknown")
             enabled = ch.get("active", ch.get("enabled", "?"))
             print(f"       - {name} ({platform}) [active={enabled}]")
+            print(f"         Raw keys: {list(ch.keys())}")
+            # Print full channel data for debugging field names
+            for key, val in ch.items():
+                if not isinstance(val, (dict, list)):
+                    print(f"         {key}: {val}")
+                else:
+                    print(f"         {key}: {json.dumps(val, indent=2)[:300]}")
     elif channels and isinstance(channels, dict):
         print(f"     Response: {json.dumps(channels, indent=2)[:500]}")
 
