@@ -106,6 +106,13 @@ def get_access_token_via_browser(client_id, client_secret):
     try:
         with urllib.request.urlopen(req) as resp:
             body = json.loads(resp.read())
+            # Check if we got a refresh token (needed for headless mode)
+            refresh_token = body.get("refresh_token")
+            if refresh_token:
+                print(f"  Refresh token received: {refresh_token[:20]}... (headless mode will work!)")
+            else:
+                print(f"  WARNING: No refresh token returned. Headless mode may not work.")
+                print(f"  Full token response keys: {list(body.keys())}")
             return body.get("access_token")
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
