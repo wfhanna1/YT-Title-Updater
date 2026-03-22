@@ -102,3 +102,26 @@ def test_save_email_config_sets_0o600_permissions(tmp_path):
     email_path = tmp_path / "email_config.json"
     mode = stat.S_IMODE(os.stat(email_path).st_mode)
     assert mode == 0o600, f"Expected 0o600 but got {oct(mode)}"
+
+
+def test_save_email_config_raises_on_tampered_path(tmp_path):
+    from youtube_updater.exceptions.custom_exceptions import ConfigError
+    cm = ConfigManager(str(tmp_path))
+    cm.email_config_path = str(tmp_path / "token.json")
+    with pytest.raises(ConfigError):
+        cm.save_email_config({"connection_string": "x", "sender": "a", "recipient": "b"})
+
+
+def test_get_email_config_raises_on_corrupt_json(tmp_path):
+    from youtube_updater.exceptions.custom_exceptions import ConfigError
+    cm = ConfigManager(str(tmp_path))
+    with open(tmp_path / "email_config.json", "w") as f:
+        f.write("{corrupt json")
+    with pytest.raises(ConfigError, match="corrupt"):
+        cm.get_email_config()
+
+
+def test_get_file_paths_includes_email_config(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    paths = cm.get_file_paths()
+    assert "email_config_path" in paths
