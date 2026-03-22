@@ -4,6 +4,8 @@ google-auth-httplib2>=0.1.0
 platformdirs>=3.0.0
 tzdata>=2023.3
 urllib3>=2.0.0
+requests>=2.28.0
+azure-communication-email>=1.0.0
 
 # Development dependencies
 pytest>=7.0.0

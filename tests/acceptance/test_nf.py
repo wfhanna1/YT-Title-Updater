@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -15,8 +16,6 @@ def test_nf1_existing_youtube_behavior_unchanged():
     All pre-existing unit and integration tests continue to pass,
     confirming no regression in YouTube-only functionality.
     """
-    # This test will be enabled in Phase 3 when --mode flag is added.
-    # It verifies that existing tests still pass after the integration.
     from youtube_updater.core.restream_client import RestreamClient
     pytest.fail("Restream integration not yet implemented -- NF1 verification deferred")
 
@@ -32,7 +31,6 @@ def test_nf2_restream_creds_0o600(temp_config_dir):
     pytest.fail("RestreamAuth not yet implemented")
 
 
-@pytest.mark.xfail(reason="Phase 1: not yet implemented", strict=True)
 def test_nf3_requests_in_requirements(project_root):
     """NF3: requests library added to requirements.txt.
 
@@ -44,7 +42,6 @@ def test_nf3_requests_in_requirements(project_root):
     assert "requests" in content, "requests not found in requirements.txt"
 
 
-@pytest.mark.xfail(reason="Phase 1: not yet implemented", strict=True)
 def test_nf4_youtube_auth_files_never_modified(temp_config_dir):
     """NF4: Never modify token.json, credentials.json, pickle.json.
 
@@ -52,5 +49,36 @@ def test_nf4_youtube_auth_files_never_modified(temp_config_dir):
     When: Restream and email config operations are performed
     Then: YouTube auth file mtimes are unchanged
     """
-    from youtube_updater.core.restream_auth import RestreamAuth
-    pytest.fail("RestreamAuth not yet implemented -- NF4 safeguard deferred")
+    from youtube_updater.core.config_manager import ConfigManager
+
+    # Create sentinel YouTube auth files
+    yt_auth_files = ["token.json", "credentials.json", "token.pickle"]
+    for name in yt_auth_files:
+        path = temp_config_dir / name
+        path.write_text("sentinel")
+
+    # Record mtimes
+    before = {}
+    for name in yt_auth_files:
+        path = temp_config_dir / name
+        before[name] = path.stat().st_mtime
+
+    # Small delay to ensure mtime would differ if written
+    time.sleep(0.05)
+
+    # Perform config operations that touch Restream/email paths
+    cm = ConfigManager(str(temp_config_dir))
+    _ = cm.get_restream_token_path()
+    cm.save_email_config({
+        "connection_string": "test",
+        "sender": "a@b.com",
+        "recipient": "c@d.com",
+    })
+    _ = cm.get_email_config()
+
+    # Verify YouTube auth files unchanged
+    for name in yt_auth_files:
+        path = temp_config_dir / name
+        assert path.stat().st_mtime == before[name], (
+            f"YouTube auth file {name} was modified by config operations"
+        )
