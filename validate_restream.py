@@ -1,28 +1,106 @@
 #!/usr/bin/env python3
-"""Quick validation script to test Restream API credentials on a free account."""
+"""Quick validation script to test Restream API credentials on a free account.
 
-import base64
+Uses OAuth2 authorization code flow:
+1. Opens browser for user to grant access
+2. Starts a local server to capture the redirect with the auth code
+3. Exchanges the code for an access token
+4. Tests API endpoints
+"""
+
 import json
+import http.server
+import threading
 import urllib.request
 import urllib.error
 import urllib.parse
+import webbrowser
 import getpass
 
 API_BASE = "https://api.restream.io/v2"
+OAUTH_AUTHORIZE_URL = "https://api.restream.io/login"
+OAUTH_TOKEN_URL = "https://api.restream.io/oauth/token"
+REDIRECT_PORT = 9451
+REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
+
+# Will be set by the callback handler
+_auth_code = None
+_auth_error = None
 
 
-def get_access_token(client_id, client_secret):
-    """Get an OAuth access token using client credentials flow."""
-    url = "https://api.restream.io/oauth/token"
+class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
+    """Handles the OAuth redirect callback."""
 
-    # Client credentials grant (form-encoded as required by Restream)
+    def do_GET(self):
+        global _auth_code, _auth_error
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+
+        if "code" in params:
+            _auth_code = params["code"][0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<h2>Authorization successful!</h2><p>You can close this tab.</p>")
+        else:
+            _auth_error = params.get("error", ["unknown"])[0]
+            self.send_response(400)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(f"<h2>Authorization failed: {_auth_error}</h2>".encode())
+
+    def log_message(self, format, *args):
+        pass  # Suppress server logs
+
+
+def get_access_token_via_browser(client_id, client_secret):
+    """Run the OAuth2 authorization code flow via browser."""
+    global _auth_code, _auth_error
+    _auth_code = None
+    _auth_error = None
+
+    # Start local server to receive callback
+    server = http.server.HTTPServer(("localhost", REDIRECT_PORT), OAuthCallbackHandler)
+    server_thread = threading.Thread(target=server.handle_request, daemon=True)
+    server_thread.start()
+
+    # Build authorization URL
+    auth_params = urllib.parse.urlencode({
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": REDIRECT_URI,
+        "state": "validate",
+    })
+    auth_url = f"{OAUTH_AUTHORIZE_URL}?{auth_params}"
+
+    print(f"  Opening browser for authorization...")
+    print(f"  If it doesn't open, visit:\n  {auth_url}\n")
+    webbrowser.open(auth_url)
+
+    # Wait for callback
+    server_thread.join(timeout=120)
+    server.server_close()
+
+    if _auth_error:
+        print(f"  Authorization denied: {_auth_error}")
+        return None
+
+    if not _auth_code:
+        print("  Timed out waiting for authorization (120s).")
+        return None
+
+    print(f"  Authorization code received. Exchanging for token...")
+
+    # Exchange code for token
     data = urllib.parse.urlencode({
-        "grant_type": "client_credentials",
+        "grant_type": "authorization_code",
         "client_id": client_id,
         "client_secret": client_secret,
+        "redirect_uri": REDIRECT_URI,
+        "code": _auth_code,
     }).encode("utf-8")
 
-    req = urllib.request.Request(url, data=data, method="POST")
+    req = urllib.request.Request(OAUTH_TOKEN_URL, data=data, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
 
     try:
@@ -31,7 +109,7 @@ def get_access_token(client_id, client_secret):
             return body.get("access_token")
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
-        print(f"  Auth failed ({e.code}): {error_body}")
+        print(f"  Token exchange failed ({e.code}): {error_body}")
         return None
 
 
@@ -65,9 +143,9 @@ def main():
         print("Both Client ID and Client Secret are required.")
         return
 
-    # Step 1: Get access token
-    print("\n1. Authenticating...")
-    token = get_access_token(client_id, client_secret)
+    # Step 1: OAuth browser flow
+    print("\n1. Authenticating (browser will open)...")
+    token = get_access_token_via_browser(client_id, client_secret)
     if not token:
         print("\n   Could not authenticate. Check your credentials.")
         print("   Note: API access may require a paid Restream plan.")
