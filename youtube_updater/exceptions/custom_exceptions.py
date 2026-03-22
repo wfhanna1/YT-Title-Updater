@@ -16,4 +16,8 @@ class TitleManagerError(YouTubeUpdaterError):
 
 class ConfigError(YouTubeUpdaterError):
     """Exception raised for configuration related errors."""
+    pass
+
+class RestreamAPIError(YouTubeUpdaterError):
+    """Exception raised for Restream API related errors."""
     pass 

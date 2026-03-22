@@ -30,3 +30,75 @@ def test_get_file_paths_returns_correct_keys(tmp_path):
     assert "token_path" in paths
     assert "client_secrets_path" in paths
     assert "history_log" in paths
+
+
+# --- Phase 1: Restream + email config methods ---
+
+
+def test_get_restream_token_path_returns_path_under_config_dir(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    path = cm.get_restream_token_path()
+    assert str(tmp_path) in path
+    assert "restream_token.json" in path
+
+
+def test_get_restream_token_path_is_stable(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    assert cm.get_restream_token_path() == cm.get_restream_token_path()
+
+
+def test_ensure_restream_token_returns_false_when_missing(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    assert cm.ensure_restream_token() is False
+
+
+def test_ensure_restream_token_returns_true_when_exists(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    token_path = cm.get_restream_token_path()
+    with open(token_path, "w") as f:
+        f.write("{}")
+    assert cm.ensure_restream_token() is True
+
+
+def test_save_email_config_writes_file(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    config = {
+        "connection_string": "endpoint=...",
+        "sender": "noreply@example.com",
+        "recipient": "admin@example.com",
+    }
+    cm.save_email_config(config)
+    assert (tmp_path / "email_config.json").exists()
+
+
+def test_get_email_config_returns_none_when_missing(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    assert cm.get_email_config() is None
+
+
+def test_get_email_config_returns_saved_data(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    config = {
+        "connection_string": "endpoint=...",
+        "sender": "noreply@example.com",
+        "recipient": "admin@example.com",
+    }
+    cm.save_email_config(config)
+    loaded = cm.get_email_config()
+    assert loaded == config
+
+
+def test_get_file_paths_includes_restream_token(tmp_path):
+    cm = ConfigManager(str(tmp_path))
+    paths = cm.get_file_paths()
+    assert "restream_token_path" in paths
+
+
+def test_save_email_config_sets_0o600_permissions(tmp_path):
+    import os
+    import stat
+    cm = ConfigManager(str(tmp_path))
+    cm.save_email_config({"connection_string": "secret", "sender": "a", "recipient": "b"})
+    email_path = tmp_path / "email_config.json"
+    mode = stat.S_IMODE(os.stat(email_path).st_mode)
+    assert mode == 0o600, f"Expected 0o600 but got {oct(mode)}"
