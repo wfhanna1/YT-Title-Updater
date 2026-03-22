@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 import platformdirs
+from ..exceptions.custom_exceptions import ConfigError
 from ..utils.file_operations import FileOperations
 
 class ConfigManager:
@@ -54,6 +55,7 @@ class ConfigManager:
             "client_secrets_path": self.client_secrets_path,
             "history_log": self.history_log,
             "restream_token_path": self.restream_token_path,
+            "email_config_path": self.email_config_path,
         }
     
     def ensure_client_secrets(self) -> bool:
@@ -94,7 +96,10 @@ class ConfigManager:
         Args:
             config: Dict with connection_string, sender, recipient
         """
-        assert os.path.basename(self.email_config_path) == "email_config.json"
+        if os.path.basename(self.email_config_path) != "email_config.json":
+            raise ConfigError(
+                f"Refusing to write: unexpected email config path '{self.email_config_path}'"
+            )
         fd = os.open(self.email_config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
             json.dump(config, f, indent=2)
@@ -107,5 +112,8 @@ class ConfigManager:
         """
         if not os.path.exists(self.email_config_path):
             return None
-        with open(self.email_config_path, "r") as f:
-            return json.load(f)
+        try:
+            with open(self.email_config_path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise ConfigError(f"email_config.json is corrupt: {e}") from e
