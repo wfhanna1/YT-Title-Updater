@@ -13,7 +13,7 @@ youtube_updater.core.default_title_generator.datetime.
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
-import pytz
+from zoneinfo import ZoneInfo
 
 from youtube_updater.core.default_title_generator import DefaultTitleGenerator
 
@@ -23,8 +23,8 @@ class TestDynamicTitleViaPatch(unittest.TestCase):
 
     def _make_eastern_dt(self, year, month, day, hour, minute=0):
         """Return a timezone-aware datetime in US/Eastern."""
-        est = pytz.timezone("US/Eastern")
-        return est.localize(datetime(year, month, day, hour, minute, 0))
+        est = ZoneInfo("US/Eastern")
+        return datetime(year, month, day, hour, minute, 0, tzinfo=est)
 
     def test_generate_title_saturday_after_5pm_returns_vespers(self):
         """Test Saturday at 6 PM Eastern returns Vespers suffix."""
@@ -94,8 +94,8 @@ class TestDynamicTitleViaPatch(unittest.TestCase):
     def test_generate_title_uses_generator_timezone(self):
         """Test that the generator uses the configured timezone for decisions."""
         # US/Pacific -- Saturday at 6 PM Pacific (9 PM Eastern, still Saturday)
-        pacific = pytz.timezone("US/Pacific")
-        saturday_6pm_pacific = pacific.localize(datetime(2024, 3, 23, 18, 0, 0))
+        pacific = ZoneInfo("US/Pacific")
+        saturday_6pm_pacific = datetime(2024, 3, 23, 18, 0, 0, tzinfo=pacific)
 
         with patch(
             "youtube_updater.core.default_title_generator.datetime"

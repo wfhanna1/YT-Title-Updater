@@ -12,7 +12,7 @@ import shutil
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-import pytz
+from zoneinfo import ZoneInfo
 
 from youtube_updater.core import YouTubeUpdaterCore
 from youtube_updater.core.title_manager import TitleManager
@@ -67,9 +67,9 @@ class TestDynamicTitleIntegration(unittest.TestCase):
 
     def test_empty_titles_file_triggers_dynamic_title_saturday_night(self):
         """Test that an empty titles file triggers dynamic title generation on Saturday night."""
-        est = pytz.timezone("US/Eastern")
+        est = ZoneInfo("US/Eastern")
         # Saturday July 15, 2023 at 8 PM Eastern
-        saturday_8pm_est = est.localize(datetime(2023, 7, 15, 20, 0, 0))
+        saturday_8pm_est = datetime(2023, 7, 15, 20, 0, 0, tzinfo=est)
 
         self.mock_youtube.get_live_stream_info.return_value = {
             "is_live": True,
@@ -93,9 +93,9 @@ class TestDynamicTitleIntegration(unittest.TestCase):
 
     def test_empty_titles_file_triggers_dynamic_title_weekday(self):
         """Test that an empty titles file triggers dynamic title generation on a weekday."""
-        est = pytz.timezone("US/Eastern")
+        est = ZoneInfo("US/Eastern")
         # Wednesday July 12, 2023 at 3 PM Eastern
-        wednesday_3pm_est = est.localize(datetime(2023, 7, 12, 15, 0, 0))
+        wednesday_3pm_est = datetime(2023, 7, 12, 15, 0, 0, tzinfo=est)
 
         self.mock_youtube.get_live_stream_info.return_value = {
             "is_live": True,
