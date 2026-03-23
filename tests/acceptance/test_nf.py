@@ -20,15 +20,34 @@ def test_nf1_existing_youtube_behavior_unchanged():
     pytest.fail("Restream integration not yet implemented -- NF1 verification deferred")
 
 
-@pytest.mark.xfail(reason="Phase 2: not yet implemented", strict=True)
 def test_nf2_restream_creds_0o600(temp_config_dir):
     """NF2: Restream credentials stored with 0o600 permissions.
 
     Given: A restream_token.json file is written by RestreamAuth
     Then: File permissions are 0o600 (owner read/write only)
     """
+    import json
+    import stat
+    from unittest.mock import patch
     from youtube_updater.core.restream_auth import RestreamAuth
-    pytest.fail("RestreamAuth not yet implemented")
+
+    token_path = str(temp_config_dir / "restream_token.json")
+    auth = RestreamAuth(
+        client_id="test_id",
+        client_secret="test_secret",
+        token_path=token_path,
+    )
+
+    fake_token = {
+        "access_token": "at",
+        "refresh_token": "rt",
+        "expires_in": 3600,
+    }
+    with patch.object(auth, "_run_oauth_flow", return_value=fake_token):
+        auth.authenticate()
+
+    mode = stat.S_IMODE(os.stat(token_path).st_mode)
+    assert mode == 0o600, f"Expected 0o600 but got {oct(mode)}"
 
 
 def test_nf3_requests_in_requirements(project_root):
