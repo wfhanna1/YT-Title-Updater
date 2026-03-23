@@ -166,3 +166,79 @@ class TestUpdateModeRouting:
         assert result == 1
         captured = capsys.readouterr()
         assert "restream-auth" in captured.err
+
+
+class TestEnvVarSupport:
+    def test_restream_client_uses_env_vars(self, cli_with_mock_core, monkeypatch):
+        """RESTREAM_CLIENT_ID and RESTREAM_CLIENT_SECRET from env are used."""
+        import json
+        cli, mock_core = cli_with_mock_core
+
+        monkeypatch.setenv("RESTREAM_CLIENT_ID", "env_cid")
+        monkeypatch.setenv("RESTREAM_CLIENT_SECRET", "env_csec")
+
+        # Write a token file with a valid non-expired token
+        token_path = mock_core.config.get_restream_token_path()
+        import time, os
+        os.makedirs(os.path.dirname(token_path), exist_ok=True)
+        with open(token_path, "w") as f:
+            json.dump({
+                "access_token": "env_at",
+                "refresh_token": "env_rt",
+                "client_id": "env_cid",
+                "expires_at": time.time() + 3600,
+            }, f)
+
+        mock_core.restream_client = None
+        mock_core.update_title_restream.return_value = None
+        mock_core.current_title = "Env Title"
+
+        args = argparse.Namespace(
+            command="update", mode="restream", wait=False, wait_timeout=90,
+            dry_run=False,
+        )
+        result = cli.run(args)
+        assert result == 0
+
+    def test_missing_client_secret_env_var_errors(self, cli_with_mock_core, capsys, monkeypatch):
+        """Missing RESTREAM_CLIENT_SECRET produces clear error."""
+        import json, time, os
+        cli, mock_core = cli_with_mock_core
+
+        monkeypatch.delenv("RESTREAM_CLIENT_SECRET", raising=False)
+        monkeypatch.delenv("RESTREAM_CLIENT_ID", raising=False)
+
+        token_path = mock_core.config.get_restream_token_path()
+        os.makedirs(os.path.dirname(token_path), exist_ok=True)
+        with open(token_path, "w") as f:
+            json.dump({
+                "access_token": "at",
+                "refresh_token": "rt",
+                "client_id": "cid",
+                "expires_at": time.time() + 3600,
+            }, f)
+
+        mock_core.restream_client = None
+
+        args = argparse.Namespace(
+            command="update", mode="restream", wait=False, wait_timeout=90,
+            dry_run=False,
+        )
+        result = cli.run(args)
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "RESTREAM_CLIENT_SECRET" in captured.err
+
+    def test_email_config_from_env_vars(self, cli_with_mock_core, monkeypatch):
+        """ACS env vars used for email when config file absent."""
+        cli, mock_core = cli_with_mock_core
+        mock_core.config.get_email_config.return_value = None
+
+        monkeypatch.setenv("ACS_CONNECTION_STRING", "endpoint=https://fake/;accesskey=k")
+        monkeypatch.setenv("ACS_SENDER", "noreply@test.azurecomm.net")
+        monkeypatch.setenv("ACS_RECIPIENTS", "a@b.com;c@d.com")
+
+        config = cli._get_email_config()
+        assert config is not None
+        assert config["connection_string"] == "endpoint=https://fake/;accesskey=k"
+        assert len(config["recipients"]) == 2

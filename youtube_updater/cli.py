@@ -223,9 +223,13 @@ class YouTubeUpdaterCLI:
     def _handle_restream_auth(self) -> int:
         """Handle the restream-auth subcommand.
 
+        Reads RESTREAM_CLIENT_ID and RESTREAM_CLIENT_SECRET from env vars
+        first, falls back to interactive prompts.
+
         Returns:
             int: 0 on success, 1 on failure
         """
+        import os
         from .core.restream_auth import RestreamAuth
 
         config = self.core.config
@@ -234,8 +238,16 @@ class YouTubeUpdaterCLI:
         print("Restream OAuth2 Authentication")
         print(f"Token will be saved to: {token_path}")
 
-        client_id = input("Restream Client ID: ").strip()
-        client_secret = input("Restream Client Secret: ").strip()
+        client_id = os.environ.get("RESTREAM_CLIENT_ID", "")
+        client_secret = os.environ.get("RESTREAM_CLIENT_SECRET", "")
+
+        if client_id and client_secret:
+            print("Using credentials from environment variables.")
+        else:
+            if not client_id:
+                client_id = input("Restream Client ID: ").strip()
+            if not client_secret:
+                client_secret = input("Restream Client Secret: ").strip()
 
         if not client_id or not client_secret:
             print("Both Client ID and Client Secret are required.", file=sys.stderr)
@@ -287,26 +299,34 @@ class YouTubeUpdaterCLI:
         if self.core.restream_client is not None:
             return
 
+        import os
         from .core.restream_auth import RestreamAuth
         from .core.restream_client import RestreamClient
 
         token_path = self.core.config.get_restream_token_path()
-        # Load token data to get client credentials
-        auth = RestreamAuth(
-            client_id="",  # Will be loaded from token
-            client_secret="",  # Will be loaded from token
-            token_path=token_path,
-        )
-        token_data = auth.load_token()
-        if token_data is None:
+
+        # Env vars take priority, fall back to token file for client_id
+        client_id = os.environ.get("RESTREAM_CLIENT_ID", "")
+        client_secret = os.environ.get("RESTREAM_CLIENT_SECRET", "")
+
+        if not client_id:
+            auth_tmp = RestreamAuth(client_id="", client_secret="", token_path=token_path)
+            token_data = auth_tmp.load_token()
+            if token_data is None:
+                raise AuthenticationError(
+                    "No Restream credentials found. Run `restream-auth` to authenticate."
+                )
+            client_id = token_data.get("client_id", "")
+
+        if not client_secret:
             raise AuthenticationError(
-                "No Restream credentials found. Run `restream-auth` to authenticate."
+                "RESTREAM_CLIENT_SECRET environment variable is required for token refresh. "
+                "Set it and retry, or run `restream-auth` to re-authenticate."
             )
 
-        # Re-create auth with actual client_id from token
         auth = RestreamAuth(
-            client_id=token_data.get("client_id", ""),
-            client_secret="",  # Not stored in token file
+            client_id=client_id,
+            client_secret=client_secret,
             token_path=token_path,
         )
         access_token = auth.get_valid_token()
@@ -385,10 +405,11 @@ class YouTubeUpdaterCLI:
         Returns:
             int: 0 on success, 1 on failure
         """
-        email_config = self.core.config.get_email_config()
+        email_config = self._get_email_config()
         if email_config is None:
             print(
-                "Error: Email not configured. Run `configure-email` first.",
+                "Error: Email not configured. Set ACS_CONNECTION_STRING, ACS_SENDER, "
+                "ACS_RECIPIENTS env vars, or run `configure-email`.",
                 file=sys.stderr,
             )
             return 1
@@ -410,13 +431,35 @@ class YouTubeUpdaterCLI:
             print("Failed to send test email. Check your configuration.", file=sys.stderr)
             return 1
 
+    def _get_email_config(self) -> dict:
+        """Get email config from env vars or config file.
+
+        Env vars take priority: ACS_CONNECTION_STRING, ACS_SENDER, ACS_RECIPIENTS.
+
+        Returns:
+            Dict with connection_string, sender, recipients, or None
+        """
+        import os
+        conn = os.environ.get("ACS_CONNECTION_STRING", "")
+        sender = os.environ.get("ACS_SENDER", "")
+        recipients_raw = os.environ.get("ACS_RECIPIENTS", "")
+
+        if conn and sender and recipients_raw:
+            return {
+                "connection_string": conn,
+                "sender": sender,
+                "recipients": [r.strip() for r in recipients_raw.split(";") if r.strip()],
+            }
+
+        return self.core.config.get_email_config()
+
     def _send_auth_failure_email(self, error_message: str) -> None:
         """Best-effort email notification on auth failure.
 
-        Loads email config and sends a notification. Never raises.
+        Checks env vars first, falls back to config file. Never raises.
         """
         try:
-            email_config = self.core.config.get_email_config()
+            email_config = self._get_email_config()
             if email_config is None:
                 return
             from .notifications.email_notifier import EmailNotifier
