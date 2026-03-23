@@ -90,10 +90,20 @@ cp dist/yt-title-updater /usr/local/bin/
 After building, confirm the binary works:
 
 ```bash
+# Verify all subcommands are available
 yt-title-updater --help
+
+# Verify YouTube mode (should show "not initialized" if no credentials yet)
+yt-title-updater status
+
+# Verify Restream mode (should prompt to run restream-auth if no credentials)
+yt-title-updater restream-status
+
+# Verify update flags
+yt-title-updater update --help
 ```
 
-You should see the list of subcommands (`update`, `status`, `auth`, `restream-auth`, `restream-status`, `configure-email`, `test-email`).
+You should see the list of subcommands (`update`, `status`, `auth`, `restream-auth`, `restream-status`, `configure-email`, `test-email`) and the `update` command should show `--mode`, `--wait`, `--wait-timeout`, and `--dry-run` flags.
 
 ---
 
