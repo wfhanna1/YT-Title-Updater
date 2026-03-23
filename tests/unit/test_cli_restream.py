@@ -34,8 +34,8 @@ class TestRestreamStatus:
         cli, mock_core = cli_with_mock_core
         mock_client = MagicMock()
         mock_client.get_channels.return_value = [
-            {"displayName": "My YT", "platform": "youtube", "active": True},
-            {"displayName": "My FB", "platform": "facebook", "active": False},
+            {"displayName": "My YT", "streamingPlatformId": 5, "enabled": True},
+            {"displayName": "My FB", "streamingPlatformId": 37, "enabled": False},
         ]
         mock_core.restream_client = mock_client
 

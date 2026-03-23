@@ -279,12 +279,20 @@ class YouTubeUpdaterCLI:
         try:
             self._ensure_restream_client()
             channels = self.core.restream_client.get_channels()
+            PLATFORM_NAMES = {
+                1: "twitch", 2: "hitbox", 3: "dailymotion", 4: "custom",
+                5: "youtube", 6: "periscope", 7: "smashcast", 8: "mixer",
+                9: "picarto", 10: "steam", 15: "vk", 20: "ok",
+                37: "facebook", 42: "linkedin", 44: "twitter/x",
+                46: "tiktok", 47: "instagram", 48: "kick",
+            }
             print(f"Connected platforms: {len(channels)}")
             for ch in channels:
                 name = ch.get("displayName", ch.get("name", "unknown"))
-                platform = ch.get("platform", "unknown")
-                active = ch.get("active", "?")
-                print(f"  - {name} ({platform}) [active={active}]")
+                platform_id = ch.get("streamingPlatformId", 0)
+                platform = PLATFORM_NAMES.get(platform_id, f"id:{platform_id}")
+                enabled = ch.get("enabled", "?")
+                print(f"  - {name} ({platform}) [enabled={enabled}]")
             return 0
         except (AuthenticationError, RestreamAPIError) as e:
             print(f"Error: {e}", file=sys.stderr)
