@@ -222,8 +222,8 @@ class TestUpdateTitleRestream(unittest.TestCase):
         with self.assertRaises(YouTubeUpdaterError):
             core.update_title_restream()
 
-    def test_update_title_restream_no_titles(self):
-        """Raises YouTubeUpdaterError when no titles available."""
+    def test_update_title_restream_no_titles_raises(self):
+        """Raises YouTubeUpdaterError when get_next_title returns None."""
         from youtube_updater.exceptions.custom_exceptions import YouTubeUpdaterError
         mock_title = MagicMock()
         mock_title.get_next_title.return_value = None
@@ -231,6 +231,32 @@ class TestUpdateTitleRestream(unittest.TestCase):
         core.restream_client = MagicMock()
         with self.assertRaises(YouTubeUpdaterError):
             core.update_title_restream()
+
+    def test_update_title_restream_empty_file_uses_default_generator(self):
+        """When titles.txt is empty, default generator provides a title."""
+        import tempfile, os
+        d = tempfile.mkdtemp()
+        from youtube_updater.core.title_manager import TitleManager
+        tm = TitleManager(
+            os.path.join(d, "titles.txt"),
+            os.path.join(d, "applied.txt"),
+            os.path.join(d, "history.log"),
+        )
+        mock_restream = MagicMock()
+        core = _make_core(title_manager=tm)
+        core.restream_client = mock_restream
+
+        core.update_title_restream()
+
+        # Should have called update with a generated title (not None)
+        call_args = mock_restream.update_stream_title.call_args[0]
+        assert call_args[0] is not None
+        assert len(call_args[0]) > 0
+        # Generated title contains a day name
+        assert any(day in call_args[0] for day in [
+            "Monday", "Tuesday", "Wednesday", "Thursday",
+            "Friday", "Saturday", "Sunday"
+        ])
 
 
 if __name__ == "__main__":
