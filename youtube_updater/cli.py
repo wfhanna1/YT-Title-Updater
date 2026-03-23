@@ -55,6 +55,10 @@ class YouTubeUpdaterCLI:
             return self._handle_restream_auth()
         elif args.command == "restream-status":
             return self._handle_restream_status()
+        elif args.command == "configure-email":
+            return self._handle_configure_email()
+        elif args.command == "test-email":
+            return self._handle_test_email()
         return 1
 
     def _handle_update(self, wait: bool = False, wait_timeout: int = 90) -> int:
@@ -177,11 +181,9 @@ class YouTubeUpdaterCLI:
             int: Exit code (0 success, 1 failure)
         """
         if not self.core.config.ensure_restream_token():
-            print(
-                "Error: No Restream credentials found. "
-                "Run `restream-auth` to authenticate.",
-                file=sys.stderr,
-            )
+            msg = "No Restream credentials found. Run `restream-auth` to authenticate."
+            print(f"Error: {msg}", file=sys.stderr)
+            self._send_auth_failure_email(msg)
             return 1
 
         # Initialize Restream client
@@ -189,6 +191,7 @@ class YouTubeUpdaterCLI:
             self._ensure_restream_client()
         except AuthenticationError as e:
             print(f"Error: {e}", file=sys.stderr)
+            self._send_auth_failure_email(str(e))
             return 1
 
         deadline = time.monotonic() + wait_timeout
@@ -220,9 +223,13 @@ class YouTubeUpdaterCLI:
     def _handle_restream_auth(self) -> int:
         """Handle the restream-auth subcommand.
 
+        Reads RESTREAM_CLIENT_ID and RESTREAM_CLIENT_SECRET from env vars
+        first, falls back to interactive prompts.
+
         Returns:
             int: 0 on success, 1 on failure
         """
+        import os
         from .core.restream_auth import RestreamAuth
 
         config = self.core.config
@@ -231,8 +238,16 @@ class YouTubeUpdaterCLI:
         print("Restream OAuth2 Authentication")
         print(f"Token will be saved to: {token_path}")
 
-        client_id = input("Restream Client ID: ").strip()
-        client_secret = input("Restream Client Secret: ").strip()
+        client_id = os.environ.get("RESTREAM_CLIENT_ID", "")
+        client_secret = os.environ.get("RESTREAM_CLIENT_SECRET", "")
+
+        if client_id and client_secret:
+            print("Using credentials from environment variables.")
+        else:
+            if not client_id:
+                client_id = input("Restream Client ID: ").strip()
+            if not client_secret:
+                client_secret = input("Restream Client Secret: ").strip()
 
         if not client_id or not client_secret:
             print("Both Client ID and Client Secret are required.", file=sys.stderr)
@@ -264,12 +279,20 @@ class YouTubeUpdaterCLI:
         try:
             self._ensure_restream_client()
             channels = self.core.restream_client.get_channels()
+            PLATFORM_NAMES = {
+                1: "twitch", 2: "hitbox", 3: "dailymotion", 4: "custom",
+                5: "youtube", 6: "periscope", 7: "smashcast", 8: "mixer",
+                9: "picarto", 10: "steam", 15: "vk", 20: "ok",
+                37: "facebook", 42: "linkedin", 44: "twitter/x",
+                46: "tiktok", 47: "instagram", 48: "kick",
+            }
             print(f"Connected platforms: {len(channels)}")
             for ch in channels:
                 name = ch.get("displayName", ch.get("name", "unknown"))
-                platform = ch.get("platform", "unknown")
-                active = ch.get("active", "?")
-                print(f"  - {name} ({platform}) [active={active}]")
+                platform_id = ch.get("streamingPlatformId", 0)
+                platform = PLATFORM_NAMES.get(platform_id, f"id:{platform_id}")
+                enabled = ch.get("enabled", "?")
+                print(f"  - {name} ({platform}) [enabled={enabled}]")
             return 0
         except (AuthenticationError, RestreamAPIError) as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -284,26 +307,34 @@ class YouTubeUpdaterCLI:
         if self.core.restream_client is not None:
             return
 
+        import os
         from .core.restream_auth import RestreamAuth
         from .core.restream_client import RestreamClient
 
         token_path = self.core.config.get_restream_token_path()
-        # Load token data to get client credentials
-        auth = RestreamAuth(
-            client_id="",  # Will be loaded from token
-            client_secret="",  # Will be loaded from token
-            token_path=token_path,
-        )
-        token_data = auth.load_token()
-        if token_data is None:
+
+        # Env vars take priority, fall back to token file for client_id
+        client_id = os.environ.get("RESTREAM_CLIENT_ID", "")
+        client_secret = os.environ.get("RESTREAM_CLIENT_SECRET", "")
+
+        if not client_id:
+            auth_tmp = RestreamAuth(client_id="", client_secret="", token_path=token_path)
+            token_data = auth_tmp.load_token()
+            if token_data is None:
+                raise AuthenticationError(
+                    "No Restream credentials found. Run `restream-auth` to authenticate."
+                )
+            client_id = token_data.get("client_id", "")
+
+        if not client_secret:
             raise AuthenticationError(
-                "No Restream credentials found. Run `restream-auth` to authenticate."
+                "RESTREAM_CLIENT_SECRET environment variable is required for token refresh. "
+                "Set it and retry, or run `restream-auth` to re-authenticate."
             )
 
-        # Re-create auth with actual client_id from token
         auth = RestreamAuth(
-            client_id=token_data.get("client_id", ""),
-            client_secret="",  # Not stored in token file
+            client_id=client_id,
+            client_secret=client_secret,
             token_path=token_path,
         )
         access_token = auth.get_valid_token()
@@ -340,6 +371,117 @@ class YouTubeUpdaterCLI:
         except Exception as e:
             print(f"Authentication failed: {e}", file=sys.stderr)
             return 1
+
+    def _handle_configure_email(self) -> int:
+        """Handle the configure-email subcommand.
+
+        Prompts for ACS connection string, sender, and recipients,
+        then saves to email_config.json.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        print("Configure email notifications for authentication failures.")
+
+        connection_string = input("ACS Connection String: ").strip()
+        sender = input("Sender email address: ").strip()
+        recipients_raw = input("Recipient email addresses (semicolon-separated): ").strip()
+
+        if not connection_string or not sender or not recipients_raw:
+            print("All fields are required.", file=sys.stderr)
+            return 1
+
+        recipients = [r.strip() for r in recipients_raw.split(";") if r.strip()]
+        if not recipients:
+            print("At least one recipient is required.", file=sys.stderr)
+            return 1
+
+        config = {
+            "connection_string": connection_string,
+            "sender": sender,
+            "recipients": recipients,
+        }
+        self.core.config.save_email_config(config)
+        print("Email configuration saved.")
+        return 0
+
+    def _handle_test_email(self) -> int:
+        """Handle the test-email subcommand.
+
+        Sends a test email using the saved configuration.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        email_config = self._get_email_config()
+        if email_config is None:
+            print(
+                "Error: Email not configured. Set ACS_CONNECTION_STRING, ACS_SENDER, "
+                "ACS_RECIPIENTS env vars, or run `configure-email`.",
+                file=sys.stderr,
+            )
+            return 1
+
+        from .notifications.email_notifier import EmailNotifier
+        notifier = EmailNotifier(
+            connection_string=email_config["connection_string"],
+            sender=email_config["sender"],
+            recipients=email_config["recipients"],
+        )
+        success = notifier.send_error_notification(
+            subject="Test Notification",
+            body="This is a test email from YT-Title-Updater. If you received this, email notifications are working.",
+        )
+        if success:
+            print("Test email sent successfully.")
+            return 0
+        else:
+            print("Failed to send test email. Check your configuration.", file=sys.stderr)
+            return 1
+
+    def _get_email_config(self) -> dict:
+        """Get email config from env vars or config file.
+
+        Env vars take priority: ACS_CONNECTION_STRING, ACS_SENDER, ACS_RECIPIENTS.
+
+        Returns:
+            Dict with connection_string, sender, recipients, or None
+        """
+        import os
+        conn = os.environ.get("ACS_CONNECTION_STRING", "")
+        sender = os.environ.get("ACS_SENDER", "")
+        recipients_raw = os.environ.get("ACS_RECIPIENTS", "")
+
+        if conn and sender and recipients_raw:
+            return {
+                "connection_string": conn,
+                "sender": sender,
+                "recipients": [r.strip() for r in recipients_raw.split(";") if r.strip()],
+            }
+
+        return self.core.config.get_email_config()
+
+    def _send_auth_failure_email(self, error_message: str) -> None:
+        """Best-effort email notification on auth failure.
+
+        Checks env vars first, falls back to config file. Never raises.
+        """
+        try:
+            email_config = self._get_email_config()
+            if email_config is None:
+                return
+            from .notifications.email_notifier import EmailNotifier
+            notifier = EmailNotifier(
+                connection_string=email_config["connection_string"],
+                sender=email_config["sender"],
+                recipients=email_config["recipients"],
+            )
+            notifier.send_error_notification(
+                subject="Authentication Failure",
+                body=f"YT-Title-Updater encountered an authentication failure:\n\n{error_message}",
+            )
+        except Exception:
+            pass
 
     def _handle_status(self) -> int:
         """Handle the status command.
@@ -432,6 +574,18 @@ def main():
     subparsers.add_parser(
         "restream-status",
         help="List connected Restream channels"
+    )
+
+    # Email configuration command
+    subparsers.add_parser(
+        "configure-email",
+        help="Configure email notifications for authentication failures"
+    )
+
+    # Test email command
+    subparsers.add_parser(
+        "test-email",
+        help="Send a test email notification"
     )
 
     args = parser.parse_args()

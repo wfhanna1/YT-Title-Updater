@@ -100,3 +100,29 @@ class TestRestreamCLICommands:
         )
         assert result.returncode == 0
         assert "--dry-run" in result.stdout
+
+    def test_configure_email_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "youtube_updater", "configure-email", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+    def test_test_email_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "youtube_updater", "test-email", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+    def test_test_email_no_config_exits_1(self, tmp_path):
+        result = subprocess.run(
+            [sys.executable, "-m", "youtube_updater",
+             "--config-dir", str(tmp_path), "test-email"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+        assert "configure-email" in result.stderr
