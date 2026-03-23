@@ -39,12 +39,17 @@ class TestNetworkTimeouts:
                 client.get_channels()
 
     def test_restream_client_update_title_timeout(self):
-        """update_stream_title handles network timeout."""
+        """update_stream_title handles network timeout on channel PATCH."""
         client = RestreamClient(access_token="token")
-        with patch("youtube_updater.core.restream_client.requests.patch",
-                    side_effect=requests.Timeout("Connection timed out")):
-            with pytest.raises(requests.Timeout):
-                client.update_stream_title("Title")
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [{"id": 1, "displayName": "YT", "enabled": True}]
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch",
+                        side_effect=requests.Timeout("Connection timed out")):
+                with pytest.raises(requests.Timeout):
+                    client.update_stream_title("Title")
 
     def test_restream_auth_refresh_timeout(self, tmp_path):
         """refresh_token handles network timeout."""
