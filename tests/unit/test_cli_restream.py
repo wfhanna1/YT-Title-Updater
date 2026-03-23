@@ -200,14 +200,15 @@ class TestEnvVarSupport:
         result = cli.run(args)
         assert result == 0
 
-    def test_missing_client_secret_env_var_errors(self, cli_with_mock_core, capsys, monkeypatch):
-        """Missing RESTREAM_CLIENT_SECRET produces clear error."""
+    def test_missing_client_secret_with_expired_token_errors(self, cli_with_mock_core, capsys, monkeypatch):
+        """Missing RESTREAM_CLIENT_SECRET with expired token produces clear error."""
         import json, time, os
         cli, mock_core = cli_with_mock_core
 
         monkeypatch.delenv("RESTREAM_CLIENT_SECRET", raising=False)
         monkeypatch.delenv("RESTREAM_CLIENT_ID", raising=False)
 
+        # Write an EXPIRED token -- refresh will need the secret
         token_path = mock_core.config.get_restream_token_path()
         os.makedirs(os.path.dirname(token_path), exist_ok=True)
         with open(token_path, "w") as f:
@@ -215,7 +216,7 @@ class TestEnvVarSupport:
                 "access_token": "at",
                 "refresh_token": "rt",
                 "client_id": "cid",
-                "expires_at": time.time() + 3600,
+                "expires_at": time.time() - 100,
             }, f)
 
         mock_core.restream_client = None
@@ -228,6 +229,35 @@ class TestEnvVarSupport:
         assert result == 1
         captured = capsys.readouterr()
         assert "RESTREAM_CLIENT_SECRET" in captured.err
+
+    def test_missing_client_secret_with_valid_token_succeeds(self, cli_with_mock_core, monkeypatch):
+        """Valid (non-expired) token works without RESTREAM_CLIENT_SECRET."""
+        import json, time, os
+        cli, mock_core = cli_with_mock_core
+
+        monkeypatch.delenv("RESTREAM_CLIENT_SECRET", raising=False)
+        monkeypatch.delenv("RESTREAM_CLIENT_ID", raising=False)
+
+        token_path = mock_core.config.get_restream_token_path()
+        os.makedirs(os.path.dirname(token_path), exist_ok=True)
+        with open(token_path, "w") as f:
+            json.dump({
+                "access_token": "valid_at",
+                "refresh_token": "rt",
+                "client_id": "cid",
+                "expires_at": time.time() + 3600,
+            }, f)
+
+        mock_core.restream_client = None
+        mock_core.update_title_restream.return_value = None
+        mock_core.current_title = "Title"
+
+        args = argparse.Namespace(
+            command="update", mode="restream", wait=False, wait_timeout=90,
+            dry_run=False,
+        )
+        result = cli.run(args)
+        assert result == 0
 
     def test_email_config_from_env_vars(self, cli_with_mock_core, monkeypatch):
         """ACS env vars used for email when config file absent."""

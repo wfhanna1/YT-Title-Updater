@@ -326,18 +326,25 @@ class YouTubeUpdaterCLI:
                 )
             client_id = token_data.get("client_id", "")
 
-        if not client_secret:
-            raise AuthenticationError(
-                "RESTREAM_CLIENT_SECRET environment variable is required for token refresh. "
-                "Set it and retry, or run `restream-auth` to re-authenticate."
-            )
-
         auth = RestreamAuth(
             client_id=client_id,
             client_secret=client_secret,
             token_path=token_path,
         )
-        access_token = auth.get_valid_token()
+
+        # Try to get a valid token. If the token is not expired, client_secret
+        # is not needed. If it IS expired and client_secret is empty, the
+        # refresh will fail with a clear error.
+        try:
+            access_token = auth.get_valid_token()
+        except AuthenticationError:
+            if not client_secret:
+                raise AuthenticationError(
+                    "Restream token expired and RESTREAM_CLIENT_SECRET environment variable "
+                    "is not set (required for token refresh). Set it and retry, or run "
+                    "`restream-auth` to re-authenticate."
+                )
+            raise
         self.core.restream_client = RestreamClient(access_token)
 
     def _handle_auth(self) -> int:
@@ -428,10 +435,16 @@ class YouTubeUpdaterCLI:
             sender=email_config["sender"],
             recipients=email_config["recipients"],
         )
-        success = notifier.send_error_notification(
-            subject="Test Notification",
-            body="This is a test email from YT-Title-Updater. If you received this, email notifications are working.",
-        )
+        try:
+            success = notifier.send_error_notification(
+                subject="Test Notification",
+                body="This is a test email from Live Stream Title Updater. If you received this, email notifications are working.",
+                raise_on_error=True,
+            )
+        except Exception as e:
+            print(f"Failed to send test email: {e}", file=sys.stderr)
+            return 1
+
         if success:
             print("Test email sent successfully.")
             return 0

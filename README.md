@@ -206,7 +206,7 @@ export RESTREAM_CLIENT_ID="your-client-id"
 export RESTREAM_CLIENT_SECRET="your-client-secret"
 ```
 
-Windows (Command Prompt):
+Windows (Command Prompt) -- do NOT use quotes with `set`:
 ```bat
 set RESTREAM_CLIENT_ID=your-client-id
 set RESTREAM_CLIENT_SECRET=your-client-secret
@@ -251,7 +251,7 @@ export ACS_SENDER="DoNotReply@your-domain.azurecomm.net"
 export ACS_RECIPIENTS="admin@example.com;backup@example.com"
 ```
 
-Windows (Command Prompt):
+Windows (Command Prompt) -- do NOT use quotes with `set`:
 ```bat
 set ACS_CONNECTION_STRING=endpoint=https://your-resource.communication.azure.com/;accesskey=...
 set ACS_SENDER=DoNotReply@your-domain.azurecomm.net

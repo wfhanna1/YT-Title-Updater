@@ -8,8 +8,8 @@ from azure.communication.email import EmailClient
 class EmailNotifier:
     """Best-effort email notifications for authentication failures.
 
-    Never raises exceptions, never blocks the caller. If sending fails,
-    it returns False and the caller continues normally.
+    Never raises exceptions by default, never blocks the caller.
+    If sending fails, it returns False and the caller continues normally.
     """
 
     def __init__(self, connection_string: str, sender: str, recipients: List[str]):
@@ -17,12 +17,14 @@ class EmailNotifier:
         self.sender = sender
         self.recipients = recipients
 
-    def send_error_notification(self, subject: str, body: str) -> bool:
+    def send_error_notification(self, subject: str, body: str, raise_on_error: bool = False) -> bool:
         """Send an error notification email.
 
         Args:
             subject: Email subject line
             body: Email body text
+            raise_on_error: If True, re-raise exceptions instead of returning False.
+                Use this for test-email so the user sees the actual error.
 
         Returns:
             True if sent successfully, False otherwise
@@ -35,7 +37,7 @@ class EmailNotifier:
                     "to": [{"address": addr} for addr in self.recipients],
                 },
                 "content": {
-                    "subject": f"[YT-Title-Updater] {subject}",
+                    "subject": f"[Live Stream Title Updater] {subject}",
                     "plainText": body,
                 },
             }
@@ -43,4 +45,6 @@ class EmailNotifier:
             poller.result()
             return True
         except Exception:
+            if raise_on_error:
+                raise
             return False
