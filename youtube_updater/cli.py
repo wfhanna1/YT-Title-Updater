@@ -11,6 +11,7 @@ from typing import Optional, Union
 
 from .core.factory import ComponentFactory
 from .core.auth_manager import AuthManager
+from .exceptions.custom_exceptions import AuthenticationError, RestreamAPIError
 
 # Polling interval used by the --wait retry loop (seconds).
 _WAIT_POLL_INTERVAL = 10
@@ -37,15 +38,24 @@ class YouTubeUpdaterCLI:
             int: Exit code (0 for success, non-zero for failure)
         """
         if args.command == "update":
+            mode = getattr(args, "mode", "youtube")
+            if mode == "restream":
+                return self._handle_update_restream(
+                    wait=args.wait, wait_timeout=args.wait_timeout
+                )
             return self._handle_update(wait=args.wait, wait_timeout=args.wait_timeout)
         elif args.command == "status":
             return self._handle_status()
         elif args.command == "auth":
             return self._handle_auth()
+        elif args.command == "restream-auth":
+            return self._handle_restream_auth()
+        elif args.command == "restream-status":
+            return self._handle_restream_status()
         return 1
 
     def _handle_update(self, wait: bool = False, wait_timeout: int = 90) -> int:
-        """Handle the update command.
+        """Handle the update command (YouTube mode).
 
         Fetches live stream info exactly once via check_live_status() and
         passes the result directly to update_title() to avoid a redundant
@@ -77,7 +87,7 @@ class YouTubeUpdaterCLI:
                     print(f"Error checking live status: {last_error}", file=sys.stderr)
                     return 1
 
-            # -- No YouTube client (missing credentials) – fail fast --------
+            # -- No YouTube client (missing credentials) -- fail fast --------
             if stream_info is None and last_error is None:
                 print(
                     f"Error: {self.core.status}",
@@ -95,7 +105,7 @@ class YouTubeUpdaterCLI:
                     print(f"Error updating title: {str(e)}", file=sys.stderr)
                     return 1
 
-            # -- Not live (or transient error) – maybe retry --------------
+            # -- Not live (or transient error) -- maybe retry --------------
             elapsed = int(wait_timeout - (deadline - time.monotonic()))
             if not wait or time.monotonic() >= deadline:
                 if last_error:
@@ -106,7 +116,7 @@ class YouTubeUpdaterCLI:
 
             if last_error:
                 print(
-                    f"Error: {last_error} — retrying in {_WAIT_POLL_INTERVAL}s"
+                    f"Error: {last_error} -- retrying in {_WAIT_POLL_INTERVAL}s"
                     f" ({elapsed}/{wait_timeout}s elapsed)"
                 )
                 last_error = None
@@ -116,6 +126,149 @@ class YouTubeUpdaterCLI:
                     f" ({elapsed}/{wait_timeout}s elapsed)"
                 )
             time.sleep(_WAIT_POLL_INTERVAL)
+
+    def _handle_update_restream(self, wait: bool = False, wait_timeout: int = 90) -> int:
+        """Handle the update command in Restream mode.
+
+        Args:
+            wait: When True, retry until success or timeout
+            wait_timeout: Maximum seconds to wait
+
+        Returns:
+            int: Exit code (0 success, 1 failure)
+        """
+        if not self.core.config.ensure_restream_token():
+            print(
+                "Error: No Restream credentials found. "
+                "Run `restream-auth` to authenticate.",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Initialize Restream client
+        try:
+            self._ensure_restream_client()
+        except AuthenticationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        deadline = time.monotonic() + wait_timeout
+        last_error: Optional[str] = None
+
+        while True:
+            try:
+                self.core.update_title_restream()
+                print(f"Restream title updated: {self.core.current_title}")
+                return 0
+            except (RestreamAPIError, Exception) as e:
+                last_error = str(e)
+                if not wait:
+                    print(f"Error: {last_error}", file=sys.stderr)
+                    return 1
+
+            elapsed = int(wait_timeout - (deadline - time.monotonic()))
+            if time.monotonic() >= deadline:
+                print(f"Timed out. Last error: {last_error}", file=sys.stderr)
+                return 1
+
+            print(
+                f"Error: {last_error} -- retrying in {_WAIT_POLL_INTERVAL}s"
+                f" ({elapsed}/{wait_timeout}s elapsed)"
+            )
+            last_error = None
+            time.sleep(_WAIT_POLL_INTERVAL)
+
+    def _handle_restream_auth(self) -> int:
+        """Handle the restream-auth subcommand.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        from .core.restream_auth import RestreamAuth
+
+        config = self.core.config
+        token_path = config.get_restream_token_path()
+
+        print("Restream OAuth2 Authentication")
+        print(f"Token will be saved to: {token_path}")
+
+        client_id = input("Restream Client ID: ").strip()
+        client_secret = input("Restream Client Secret: ").strip()
+
+        if not client_id or not client_secret:
+            print("Both Client ID and Client Secret are required.", file=sys.stderr)
+            return 1
+
+        try:
+            auth = RestreamAuth(client_id, client_secret, token_path)
+            auth.authenticate()
+            print("Restream authentication successful.")
+            return 0
+        except AuthenticationError as e:
+            print(f"Restream authentication failed: {e}", file=sys.stderr)
+            return 1
+
+    def _handle_restream_status(self) -> int:
+        """Handle the restream-status subcommand.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        if not self.core.config.ensure_restream_token():
+            print(
+                "Error: No Restream credentials found. "
+                "Run `restream-auth` to authenticate.",
+                file=sys.stderr,
+            )
+            return 1
+
+        try:
+            self._ensure_restream_client()
+            channels = self.core.restream_client.get_channels()
+            print(f"Connected platforms: {len(channels)}")
+            for ch in channels:
+                name = ch.get("displayName", ch.get("name", "unknown"))
+                platform = ch.get("platform", "unknown")
+                active = ch.get("active", "?")
+                print(f"  - {name} ({platform}) [active={active}]")
+            return 0
+        except (AuthenticationError, RestreamAPIError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    def _ensure_restream_client(self) -> None:
+        """Initialize the Restream client if not already done.
+
+        Raises:
+            AuthenticationError: If token is missing or invalid
+        """
+        if self.core.restream_client is not None:
+            return
+
+        from .core.restream_auth import RestreamAuth
+        from .core.restream_client import RestreamClient
+
+        token_path = self.core.config.get_restream_token_path()
+        # Load token data to get client credentials
+        auth = RestreamAuth(
+            client_id="",  # Will be loaded from token
+            client_secret="",  # Will be loaded from token
+            token_path=token_path,
+        )
+        token_data = auth.load_token()
+        if token_data is None:
+            raise AuthenticationError(
+                "No Restream credentials found. Run `restream-auth` to authenticate."
+            )
+
+        # Re-create auth with actual client_id from token
+        auth = RestreamAuth(
+            client_id=token_data.get("client_id", ""),
+            client_secret="",  # Not stored in token file
+            token_path=token_path,
+        )
+        access_token = auth.get_valid_token()
+        self.core.restream_client = RestreamClient(access_token)
 
     def _handle_auth(self) -> int:
         """Handle the auth subcommand.
@@ -188,6 +341,12 @@ def main():
         help="Update the current live stream title"
     )
     update_parser.add_argument(
+        "--mode",
+        choices=["youtube", "restream"],
+        default="youtube",
+        help="Which platform to update (default: youtube)"
+    )
+    update_parser.add_argument(
         "--wait",
         action="store_true",
         default=False,
@@ -215,6 +374,18 @@ def main():
     subparsers.add_parser(
         "auth",
         help="Authorise the YouTube account (run once after placing client_secrets.json)"
+    )
+
+    # Restream auth command
+    subparsers.add_parser(
+        "restream-auth",
+        help="Authenticate with Restream (interactive OAuth2 browser flow)"
+    )
+
+    # Restream status command
+    subparsers.add_parser(
+        "restream-status",
+        help="List connected Restream channels"
     )
 
     args = parser.parse_args()

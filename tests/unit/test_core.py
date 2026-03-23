@@ -197,5 +197,41 @@ class TestNextTitleProperty(unittest.TestCase):
         self.assertEqual(core.next_title, "No titles available")
 
 
+class TestUpdateTitleRestream(unittest.TestCase):
+    """Test update_title_restream() method."""
+
+    def test_update_title_restream_success(self):
+        """Restream title updated and archived on success."""
+        mock_restream = MagicMock()
+        mock_title = MagicMock()
+        mock_title.get_next_title.return_value = "Restream Title"
+        core = _make_core(title_manager=mock_title)
+        core.restream_client = mock_restream
+
+        core.update_title_restream()
+
+        mock_restream.update_stream_title.assert_called_once_with("Restream Title")
+        mock_title.archive_title.assert_called_once_with("Restream Title")
+        self.assertEqual(core.current_title, "Restream Title")
+
+    def test_update_title_restream_no_client(self):
+        """Raises YouTubeUpdaterError when no Restream client."""
+        from youtube_updater.exceptions.custom_exceptions import YouTubeUpdaterError
+        core = _make_core()
+        core.restream_client = None
+        with self.assertRaises(YouTubeUpdaterError):
+            core.update_title_restream()
+
+    def test_update_title_restream_no_titles(self):
+        """Raises YouTubeUpdaterError when no titles available."""
+        from youtube_updater.exceptions.custom_exceptions import YouTubeUpdaterError
+        mock_title = MagicMock()
+        mock_title.get_next_title.return_value = None
+        core = _make_core(title_manager=mock_title)
+        core.restream_client = MagicMock()
+        with self.assertRaises(YouTubeUpdaterError):
+            core.update_title_restream()
+
+
 if __name__ == "__main__":
     unittest.main()

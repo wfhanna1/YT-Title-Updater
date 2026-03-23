@@ -55,6 +55,7 @@ class YouTubeUpdaterCore:
         self.auth_manager = auth_manager
         self.youtube_client = youtube_client
         self.logger = logger
+        self.restream_client = None
 
         # Initialize status manager
         self.status_manager = StatusManager(logger)
@@ -137,6 +138,30 @@ class YouTubeUpdaterCore:
         # Update current title
         self.current_title = new_title
         self.status_manager.set_status(f"Title updated to: {new_title}", "success")
+
+    def update_title_restream(self) -> None:
+        """Update the stream title via the Restream API.
+
+        Gets the next title from the title manager, sends it to
+        Restream, and archives it on success.
+
+        Raises:
+            YouTubeUpdaterError: If no Restream client or no titles available
+            RestreamAPIError: On Restream API failures
+        """
+        if not self.restream_client:
+            self.status_manager.set_status("Restream client not initialized", "error")
+            raise YouTubeUpdaterError("Restream client not initialized")
+
+        new_title = self.title_manager.get_next_title()
+        if not new_title:
+            self.status_manager.set_status("No titles available to update.", "warning")
+            raise YouTubeUpdaterError("No titles available to update.")
+
+        self.restream_client.update_stream_title(new_title)
+        self.title_manager.archive_title(new_title)
+        self.current_title = new_title
+        self.status_manager.set_status(f"Restream title updated to: {new_title}", "success")
 
     def get_next_title(self) -> str:
         """Get the next title in the rotation (rotates the file).
