@@ -24,6 +24,19 @@ A command-line tool that automatically updates your live stream title when you g
 > PyInstaller does not cross-compile -- a Windows `.exe` must be built on
 > Windows, a macOS binary must be built on macOS.
 
+### Running without building
+
+If you prefer to run from source instead of building a standalone binary:
+
+```bash
+git clone https://github.com/wfhanna1/YT-Title-Updater.git
+cd YT-Title-Updater
+pip install -r requirements.txt
+python3 -m youtube_updater --help
+```
+
+All commands below use `yt-title-updater` (the compiled binary). Replace with `python3 -m youtube_updater` if running from source.
+
 ### Building on Windows
 
 Open **Command Prompt** or **PowerShell**:
@@ -109,6 +122,25 @@ You should see the list of subcommands (`update`, `status`, `auth`, `restream-au
 
 ## First-Time Setup
 
+### Add your stream titles
+
+Open `titles.txt` in the config directory and add your planned titles, one per line:
+
+```
+Episode 12 - Getting Started With Rust
+Episode 13 - Ownership and Borrowing
+Episode 14 - Lifetimes Explained
+```
+
+The first line is always used next. After each successful update it moves to the end of the file. If `titles.txt` is empty, a default title is generated based on the day and time.
+
+**Config directory locations:**
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\YTTitleUpdater\YTTitleUpdater\` |
+| macOS | `~/Library/Application Support/YTTitleUpdater/YTTitleUpdater/` |
+
 ### YouTube Mode (default)
 
 #### 1. Create YouTube API credentials
@@ -138,13 +170,6 @@ Download it from the Google Cloud Console and copy it to:
 
 Copy the file there, then run `yt-title-updater auth` again. A browser window will open for you to log in and authorize access to your YouTube account. On success, `token.json` is saved to the same directory and you will not need to repeat this step.
 
-**Config directory locations:**
-
-| OS | Path |
-|---|---|
-| Windows | `%APPDATA%\YTTitleUpdater\YTTitleUpdater\` |
-| macOS | `~/Library/Application Support/YTTitleUpdater/YTTitleUpdater/` |
-
 ### Restream Mode
 
 Restream mode updates the stream title across all your connected platforms (YouTube, Facebook, Instagram, etc.) via the Restream API.
@@ -154,14 +179,26 @@ Restream mode updates the stream title across all your connected platforms (YouT
 1. Go to [Restream Developer Portal](https://developers.restream.io/).
 2. Create an application.
 3. Note the **Client ID** and **Client Secret**.
-4. Set the redirect URI to `http://localhost:9451/callback`.
+4. In your application settings, add `http://localhost:9451/callback` as a redirect URI.
 
 #### 2. Set environment variables
 
+macOS / Linux:
 ```bash
-# Required for Restream
 export RESTREAM_CLIENT_ID="your-client-id"
 export RESTREAM_CLIENT_SECRET="your-client-secret"
+```
+
+Windows (Command Prompt):
+```bat
+set RESTREAM_CLIENT_ID=your-client-id
+set RESTREAM_CLIENT_SECRET=your-client-secret
+```
+
+Windows (PowerShell):
+```powershell
+$env:RESTREAM_CLIENT_ID = "your-client-id"
+$env:RESTREAM_CLIENT_SECRET = "your-client-secret"
 ```
 
 These are required every time you run the tool in Restream mode. The client secret is not stored on disk for security.
@@ -190,10 +227,18 @@ Configure email alerts for authentication failures. This is useful for headless/
 
 #### Option A: Environment variables
 
+macOS / Linux:
 ```bash
 export ACS_CONNECTION_STRING="endpoint=https://your-resource.communication.azure.com/;accesskey=..."
 export ACS_SENDER="DoNotReply@your-domain.azurecomm.net"
 export ACS_RECIPIENTS="admin@example.com;backup@example.com"
+```
+
+Windows (Command Prompt):
+```bat
+set ACS_CONNECTION_STRING=endpoint=https://your-resource.communication.azure.com/;accesskey=...
+set ACS_SENDER=DoNotReply@your-domain.azurecomm.net
+set ACS_RECIPIENTS=admin@example.com;backup@example.com
 ```
 
 #### Option B: Interactive configuration
@@ -207,18 +252,6 @@ yt-title-updater test-email
 ```
 
 Email notifications use Azure Communication Services. They are best-effort -- if sending fails, the tool continues normally.
-
-### 3. Add your stream titles
-
-Open `titles.txt` in the config directory and add your planned titles, one per line:
-
-```
-Episode 12 - Getting Started With Rust
-Episode 13 - Ownership and Borrowing
-Episode 14 - Lifetimes Explained
-```
-
-The first line is always used next. After each successful update it moves to the end of the file. If `titles.txt` is empty, a default title is generated based on the day and time.
 
 ---
 
@@ -234,7 +267,7 @@ yt-title-updater update
 # Update the title on all Restream platforms
 yt-title-updater update --mode restream
 
-# Dry run -- show what would happen without making changes
+# Dry run -- show what would happen without making changes (Restream only)
 yt-title-updater update --mode restream --dry-run
 
 # Wait up to 90 seconds for the stream to go live, then update
@@ -291,7 +324,10 @@ in the background. OBS is not blocked. The tool polls every 10 seconds until the
 
 ### Restream mode in OBS
 
-For Restream mode, the `RESTREAM_CLIENT_ID` and `RESTREAM_CLIENT_SECRET` environment variables must be set in the environment where OBS runs. On macOS, this means setting them in your shell profile (`~/.zshrc` or `~/.bash_profile`) before launching OBS. On Windows, set them as system environment variables.
+For Restream mode, the `RESTREAM_CLIENT_ID` and `RESTREAM_CLIENT_SECRET` environment variables must be set in the environment where OBS runs:
+
+- **macOS**: Add them to `~/.zshrc` or `~/.bash_profile`, then restart OBS.
+- **Windows**: Set them as system environment variables via Settings > System > Environment Variables, then restart OBS.
 
 ---
 
@@ -316,12 +352,14 @@ All files are in the config directory (see paths above).
 | File | Purpose |
 |---|---|
 | `client_secrets.json` | YouTube OAuth credentials (you provide this) |
-| `token.json` | YouTube OAuth token (generated by `auth`, do not share) |
-| `restream_token.json` | Restream OAuth token (generated by `restream-auth`, do not share) |
+| `token.json` | YouTube OAuth token (generated by `auth`) |
+| `restream_token.json` | Restream OAuth token (generated by `restream-auth`) |
 | `email_config.json` | Email notification settings (generated by `configure-email`) |
 | `titles.txt` | Your upcoming stream titles, one per line |
 | `applied-titles.txt` | Titles that have been applied |
 | `history.log` | Timestamped log of every title update |
+
+> **Security:** `token.json`, `restream_token.json`, and `email_config.json` contain sensitive credentials. Do not share them, commit them to version control, or back them up to cloud storage without encryption. Token files are saved with 0o600 permissions (owner-only read/write) on Unix systems.
 
 ---
 
