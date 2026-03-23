@@ -92,7 +92,6 @@ class TestGetValidToken:
             "access_token": "valid_at",
             "refresh_token": "rt",
             "client_id": "test_cid",
-            "client_secret": "test_csec",
             "expires_at": time.time() + 3600,
         }
         with open(token_path, "w") as f:
@@ -106,7 +105,6 @@ class TestGetValidToken:
             "access_token": "expired_at",
             "refresh_token": "valid_rt",
             "client_id": "test_cid",
-            "client_secret": "test_csec",
             "expires_at": time.time() - 100,
         }
         with open(token_path, "w") as f:
@@ -127,3 +125,26 @@ class TestGetValidToken:
         """get_valid_token() raises AuthenticationError when no token file."""
         with pytest.raises(AuthenticationError, match="restream-auth"):
             auth.get_valid_token()
+
+
+class TestErrorHandling:
+    def test_load_token_corrupt_json(self, auth, token_path):
+        """load_token() raises AuthenticationError on corrupt JSON."""
+        with open(token_path, "w") as f:
+            f.write("{corrupt")
+        with pytest.raises(AuthenticationError, match="corrupt"):
+            auth.load_token()
+
+    def test_build_token_data_missing_access_token(self, auth):
+        """_build_token_data raises AuthenticationError if access_token missing."""
+        with pytest.raises(AuthenticationError, match="access_token"):
+            auth._build_token_data({"refresh_token": "rt", "expires_in": 3600})
+
+    def test_saved_token_does_not_contain_client_secret(self, auth, token_path):
+        """Token file must not contain client_secret."""
+        fake_token = {"access_token": "at", "refresh_token": "rt", "expires_in": 3600}
+        with patch.object(auth, "_run_oauth_flow", return_value=fake_token):
+            auth.authenticate()
+        with open(token_path) as f:
+            saved = json.load(f)
+        assert "client_secret" not in saved

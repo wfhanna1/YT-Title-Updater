@@ -1,5 +1,6 @@
 """Restream OAuth2 authentication manager."""
 
+import html
 import http.server
 import json
 import os
@@ -53,11 +54,20 @@ class RestreamAuth:
 
         Returns:
             Token dict, or None if file doesn't exist
+
+        Raises:
+            AuthenticationError: If file is corrupt
         """
         if not os.path.exists(self.token_path):
             return None
-        with open(self.token_path, "r") as f:
-            return json.load(f)
+        try:
+            with open(self.token_path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise AuthenticationError(
+                f"Restream token file is corrupt: {e}. "
+                "Run `restream-auth` to re-authenticate."
+            ) from e
 
     def refresh_token(self, refresh_token_value: str) -> Dict[str, Any]:
         """Refresh the access token using the refresh token.
@@ -146,18 +156,28 @@ class RestreamAuth:
                     self.send_header("Content-Type", "text/html")
                     self.end_headers()
                     self.wfile.write(b"<h2>Authorization successful!</h2><p>You can close this tab.</p>")
-                else:
-                    auth_error = params.get("error", ["unknown"])[0]
+                elif "error" in params:
+                    auth_error = params["error"][0]
                     self.send_response(400)
                     self.send_header("Content-Type", "text/html")
                     self.end_headers()
-                    self.wfile.write(f"<h2>Authorization failed: {auth_error}</h2>".encode())
+                    escaped = html.escape(auth_error)
+                    self.wfile.write(f"<h2>Authorization failed: {escaped}</h2>".encode())
+                else:
+                    # Ignore unrelated requests (favicon, prefetch, etc.)
+                    self.send_response(204)
+                    self.end_headers()
 
             def log_message(self, format, *args):
                 pass
 
         server = http.server.HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
-        server_thread = threading.Thread(target=server.handle_request, daemon=True)
+
+        def serve_until_done():
+            while auth_code is None and auth_error is None:
+                server.handle_request()
+
+        server_thread = threading.Thread(target=serve_until_done, daemon=True)
         server_thread.start()
 
         auth_params = urllib.parse.urlencode({
@@ -198,14 +218,23 @@ class RestreamAuth:
         return resp.json()
 
     def _build_token_data(self, token_response: Dict[str, Any]) -> Dict[str, Any]:
-        """Build the token data dict to persist."""
-        return {
-            "access_token": token_response["access_token"],
-            "refresh_token": token_response.get("refresh_token", ""),
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "expires_at": time.time() + token_response.get("expires_in", 3600),
-        }
+        """Build the token data dict to persist.
+
+        Raises:
+            AuthenticationError: If the response is missing required fields
+        """
+        try:
+            return {
+                "access_token": token_response["access_token"],
+                "refresh_token": token_response.get("refresh_token", ""),
+                "client_id": self.client_id,
+                "expires_at": time.time() + token_response.get("expires_in", 3600),
+            }
+        except KeyError as e:
+            raise AuthenticationError(
+                f"Restream API returned an unexpected response (missing {e}). "
+                "Try again or contact support."
+            ) from e
 
     def _save_token(self, token_data: Dict[str, Any]) -> None:
         """Save token data to disk with 0o600 permissions."""

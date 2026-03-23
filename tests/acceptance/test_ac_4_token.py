@@ -25,7 +25,6 @@ def test_ac_4_1_expired_token_silent_refresh(temp_config_dir):
         "access_token": "old_expired",
         "refresh_token": "valid_refresh",
         "client_id": "cid",
-        "client_secret": "csec",
         "expires_at": time.time() - 300,
     }
     with open(token_path, "w") as f:
@@ -68,7 +67,6 @@ def test_ac_4_2_invalid_refresh_token_error(temp_config_dir):
         "access_token": "old",
         "refresh_token": "revoked_rt",
         "client_id": "cid",
-        "client_secret": "csec",
         "expires_at": time.time() - 300,
     }
     with open(token_path, "w") as f:

@@ -67,7 +67,6 @@ def test_ac_1_2_silent_refresh_without_browser(temp_config_dir):
         "access_token": "expired_at",
         "refresh_token": "valid_rt",
         "client_id": "test_id",
-        "client_secret": "test_secret",
         "expires_at": time.time() - 100,  # expired
     }
     with open(token_path, "w") as f:

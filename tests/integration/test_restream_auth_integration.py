@@ -35,7 +35,7 @@ class TestRestreamAuthIntegration:
         assert loaded["access_token"] == "initial_at"
         assert loaded["refresh_token"] == "initial_rt"
         assert loaded["client_id"] == "int_cid"
-        assert loaded["client_secret"] == "int_csec"
+        assert "client_secret" not in loaded
         assert loaded["expires_at"] > time.time()
 
         # Step 3: get_valid_token returns cached (not expired)
