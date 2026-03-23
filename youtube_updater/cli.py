@@ -55,6 +55,10 @@ class YouTubeUpdaterCLI:
             return self._handle_restream_auth()
         elif args.command == "restream-status":
             return self._handle_restream_status()
+        elif args.command == "configure-email":
+            return self._handle_configure_email()
+        elif args.command == "test-email":
+            return self._handle_test_email()
         return 1
 
     def _handle_update(self, wait: bool = False, wait_timeout: int = 90) -> int:
@@ -177,11 +181,9 @@ class YouTubeUpdaterCLI:
             int: Exit code (0 success, 1 failure)
         """
         if not self.core.config.ensure_restream_token():
-            print(
-                "Error: No Restream credentials found. "
-                "Run `restream-auth` to authenticate.",
-                file=sys.stderr,
-            )
+            msg = "No Restream credentials found. Run `restream-auth` to authenticate."
+            print(f"Error: {msg}", file=sys.stderr)
+            self._send_auth_failure_email(msg)
             return 1
 
         # Initialize Restream client
@@ -189,6 +191,7 @@ class YouTubeUpdaterCLI:
             self._ensure_restream_client()
         except AuthenticationError as e:
             print(f"Error: {e}", file=sys.stderr)
+            self._send_auth_failure_email(str(e))
             return 1
 
         deadline = time.monotonic() + wait_timeout
@@ -341,6 +344,94 @@ class YouTubeUpdaterCLI:
             print(f"Authentication failed: {e}", file=sys.stderr)
             return 1
 
+    def _handle_configure_email(self) -> int:
+        """Handle the configure-email subcommand.
+
+        Prompts for ACS connection string, sender, and recipients,
+        then saves to email_config.json.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        print("Configure email notifications for authentication failures.")
+
+        connection_string = input("ACS Connection String: ").strip()
+        sender = input("Sender email address: ").strip()
+        recipients_raw = input("Recipient email addresses (semicolon-separated): ").strip()
+
+        if not connection_string or not sender or not recipients_raw:
+            print("All fields are required.", file=sys.stderr)
+            return 1
+
+        recipients = [r.strip() for r in recipients_raw.split(";") if r.strip()]
+        if not recipients:
+            print("At least one recipient is required.", file=sys.stderr)
+            return 1
+
+        config = {
+            "connection_string": connection_string,
+            "sender": sender,
+            "recipients": recipients,
+        }
+        self.core.config.save_email_config(config)
+        print("Email configuration saved.")
+        return 0
+
+    def _handle_test_email(self) -> int:
+        """Handle the test-email subcommand.
+
+        Sends a test email using the saved configuration.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        email_config = self.core.config.get_email_config()
+        if email_config is None:
+            print(
+                "Error: Email not configured. Run `configure-email` first.",
+                file=sys.stderr,
+            )
+            return 1
+
+        from .notifications.email_notifier import EmailNotifier
+        notifier = EmailNotifier(
+            connection_string=email_config["connection_string"],
+            sender=email_config["sender"],
+            recipients=email_config["recipients"],
+        )
+        success = notifier.send_error_notification(
+            subject="Test Notification",
+            body="This is a test email from YT-Title-Updater. If you received this, email notifications are working.",
+        )
+        if success:
+            print("Test email sent successfully.")
+            return 0
+        else:
+            print("Failed to send test email. Check your configuration.", file=sys.stderr)
+            return 1
+
+    def _send_auth_failure_email(self, error_message: str) -> None:
+        """Best-effort email notification on auth failure.
+
+        Loads email config and sends a notification. Never raises.
+        """
+        try:
+            email_config = self.core.config.get_email_config()
+            if email_config is None:
+                return
+            from .notifications.email_notifier import EmailNotifier
+            notifier = EmailNotifier(
+                connection_string=email_config["connection_string"],
+                sender=email_config["sender"],
+                recipients=email_config["recipients"],
+            )
+            notifier.send_error_notification(
+                subject="Authentication Failure",
+                body=f"YT-Title-Updater encountered an authentication failure:\n\n{error_message}",
+            )
+        except Exception:
+            pass
+
     def _handle_status(self) -> int:
         """Handle the status command.
 
@@ -432,6 +523,18 @@ def main():
     subparsers.add_parser(
         "restream-status",
         help="List connected Restream channels"
+    )
+
+    # Email configuration command
+    subparsers.add_parser(
+        "configure-email",
+        help="Configure email notifications for authentication failures"
+    )
+
+    # Test email command
+    subparsers.add_parser(
+        "test-email",
+        help="Send a test email notification"
     )
 
     args = parser.parse_args()
