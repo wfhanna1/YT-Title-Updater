@@ -7,6 +7,7 @@ import requests
 from ..exceptions.custom_exceptions import RestreamAPIError
 
 API_BASE = "https://api.restream.io/v2"
+REQUEST_TIMEOUT = 30  # seconds
 
 
 class RestreamClient:
@@ -27,12 +28,14 @@ class RestreamClient:
         """List all connected channels/platforms.
 
         Returns:
-            List of channel dicts with displayName, platform, active keys
+            List of channel dicts with id, displayName, streamingPlatformId, enabled
 
         Raises:
             RestreamAPIError: On API failures
         """
-        resp = requests.get(f"{API_BASE}/user/channel/all", headers=self._headers)
+        resp = requests.get(
+            f"{API_BASE}/user/channel/all", headers=self._headers, timeout=REQUEST_TIMEOUT
+        )
         if resp.status_code == 401:
             raise RestreamAPIError(
                 "Restream authentication failed (401). "
@@ -53,7 +56,9 @@ class RestreamClient:
         Raises:
             RestreamAPIError: On API failures (except 404)
         """
-        resp = requests.get(f"{API_BASE}/user/stream", headers=self._headers)
+        resp = requests.get(
+            f"{API_BASE}/user/stream", headers=self._headers, timeout=REQUEST_TIMEOUT
+        )
         if resp.status_code == 404:
             return None
         if resp.status_code == 401:
@@ -68,7 +73,9 @@ class RestreamClient:
         return resp.json()
 
     def update_stream_title(self, title: str) -> None:
-        """Update the stream title across all connected platforms.
+        """Update the stream title across all connected channels.
+
+        Iterates over all channels and PATCHes each one with the new title.
 
         Args:
             title: New stream title
@@ -76,12 +83,29 @@ class RestreamClient:
         Raises:
             RestreamAPIError: On API failures
         """
-        resp = requests.patch(
-            f"{API_BASE}/user/stream",
-            json={"title": title},
-            headers=self._headers,
-        )
-        if resp.status_code not in (200, 204):
+        channels = self.get_channels()
+        if not channels:
+            raise RestreamAPIError("No channels found on Restream account.")
+
+        errors = []
+        updated = 0
+        for ch in channels:
+            channel_id = ch.get("id")
+            name = ch.get("displayName", "unknown")
+            if not channel_id:
+                continue
+            resp = requests.patch(
+                f"{API_BASE}/user/channel/{channel_id}",
+                json={"active": True, "title": title},
+                headers=self._headers,
+                timeout=REQUEST_TIMEOUT,
+            )
+            if resp.status_code in (200, 204):
+                updated += 1
+            else:
+                errors.append(f"{name}: {resp.status_code} {resp.text[:100]}")
+
+        if updated == 0:
             raise RestreamAPIError(
-                f"Failed to update stream title ({resp.status_code}): {resp.text}"
+                f"Failed to update any channels. Errors: {'; '.join(errors)}"
             )

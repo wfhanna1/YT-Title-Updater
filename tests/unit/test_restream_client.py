@@ -53,16 +53,60 @@ class TestGetStreamInfo:
 
 class TestUpdateStreamTitle:
     def test_update_stream_title_success(self, client):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_resp):
-            client.update_stream_title("New Title")
-        # No exception = success
+        """Updates all channels via PATCH /user/channel/{id}."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT", "enabled": True},
+            {"id": 2, "displayName": "FB", "enabled": True},
+        ]
+        mock_patch_resp = MagicMock()
+        mock_patch_resp.status_code = 200
 
-    def test_update_stream_title_failure(self, client):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.text = "Internal Server Error"
-        with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_resp):
-            with pytest.raises(RestreamAPIError, match="500"):
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_patch_resp) as mock_patch:
+                client.update_stream_title("New Title")
+        # Should have PATCHed both channels
+        assert mock_patch.call_count == 2
+
+    def test_update_stream_title_all_fail(self, client):
+        """Raises RestreamAPIError when all channel updates fail."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT", "enabled": True},
+        ]
+        mock_patch_resp = MagicMock()
+        mock_patch_resp.status_code = 500
+        mock_patch_resp.text = "Internal Server Error"
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_patch_resp):
+                with pytest.raises(RestreamAPIError, match="Failed to update"):
+                    client.update_stream_title("New Title")
+
+    def test_update_stream_title_no_channels(self, client):
+        """Raises RestreamAPIError when no channels exist."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = []
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with pytest.raises(RestreamAPIError, match="No channels"):
+                client.update_stream_title("New Title")
+
+    def test_update_stream_title_partial_success(self, client):
+        """Some channels succeed, some fail -- no error if at least one succeeds."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT", "enabled": True},
+            {"id": 2, "displayName": "FB", "enabled": True},
+        ]
+        success_resp = MagicMock(status_code=200)
+        fail_resp = MagicMock(status_code=500, text="error")
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch", side_effect=[success_resp, fail_resp]):
+                # Should not raise because at least one succeeded
                 client.update_stream_title("New Title")
