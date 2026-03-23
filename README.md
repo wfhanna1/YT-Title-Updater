@@ -39,6 +39,23 @@ All commands below use `yt-title-updater` (the compiled binary). Replace with `p
 
 ### Building on Windows
 
+#### Prerequisites
+
+1. **Install Python 3.9+** from [python.org/downloads](https://www.python.org/downloads/). During installation, check **"Add Python to PATH"** -- this is critical.
+2. **Install Git** from [git-scm.com](https://git-scm.com/download/win) if you don't have it.
+
+After installing, open a **new** Command Prompt or PowerShell window and verify:
+
+```bat
+python --version
+pip --version
+git --version
+```
+
+If `python` is not recognized, Python was installed without the PATH option. Either reinstall with "Add to PATH" checked, or use the full path (e.g. `C:\Users\YourName\AppData\Local\Programs\Python\Python312\python.exe`).
+
+#### Build steps
+
 Open **Command Prompt** or **PowerShell**:
 
 ```bat
