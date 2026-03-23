@@ -32,7 +32,7 @@ class FileOperations(IFileOperations):
         """
         try:
             with open(file_path, "r") as f:
-                return [line.strip() for line in f.readlines()]
+                return [line.strip() for line in f.readlines() if line.strip()]
         except Exception as e:
             raise IOError(f"Error reading file: {str(e)}")
     

@@ -18,6 +18,7 @@ OAUTH_AUTHORIZE_URL = "https://api.restream.io/login"
 OAUTH_TOKEN_URL = "https://api.restream.io/oauth/token"
 REDIRECT_PORT = 9451
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
+REQUEST_TIMEOUT = 30  # seconds
 
 
 class RestreamAuth:
@@ -90,6 +91,7 @@ class RestreamAuth:
                 "refresh_token": refresh_token_value,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=REQUEST_TIMEOUT,
         )
 
         if resp.status_code != 200:
@@ -171,7 +173,13 @@ class RestreamAuth:
             def log_message(self, format, *args):
                 pass
 
-        server = http.server.HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
+        try:
+            server = http.server.HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
+        except OSError as e:
+            raise AuthenticationError(
+                f"Cannot start OAuth callback server on port {REDIRECT_PORT}: {e}. "
+                "Another instance may be running, or the port is in use."
+            ) from e
 
         def serve_until_done():
             while auth_code is None and auth_error is None:
@@ -208,6 +216,7 @@ class RestreamAuth:
                 "code": auth_code,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=REQUEST_TIMEOUT,
         )
 
         if resp.status_code != 200:

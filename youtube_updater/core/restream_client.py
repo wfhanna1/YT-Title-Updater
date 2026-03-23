@@ -7,6 +7,7 @@ import requests
 from ..exceptions.custom_exceptions import RestreamAPIError
 
 API_BASE = "https://api.restream.io/v2"
+REQUEST_TIMEOUT = 30  # seconds
 
 
 class RestreamClient:
@@ -32,7 +33,9 @@ class RestreamClient:
         Raises:
             RestreamAPIError: On API failures
         """
-        resp = requests.get(f"{API_BASE}/user/channel/all", headers=self._headers)
+        resp = requests.get(
+            f"{API_BASE}/user/channel/all", headers=self._headers, timeout=REQUEST_TIMEOUT
+        )
         if resp.status_code == 401:
             raise RestreamAPIError(
                 "Restream authentication failed (401). "
@@ -53,7 +56,9 @@ class RestreamClient:
         Raises:
             RestreamAPIError: On API failures (except 404)
         """
-        resp = requests.get(f"{API_BASE}/user/stream", headers=self._headers)
+        resp = requests.get(
+            f"{API_BASE}/user/stream", headers=self._headers, timeout=REQUEST_TIMEOUT
+        )
         if resp.status_code == 404:
             return None
         if resp.status_code == 401:
@@ -80,6 +85,7 @@ class RestreamClient:
             f"{API_BASE}/user/stream",
             json={"title": title},
             headers=self._headers,
+            timeout=REQUEST_TIMEOUT,
         )
         if resp.status_code not in (200, 204):
             raise RestreamAPIError(
