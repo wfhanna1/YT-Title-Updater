@@ -9,15 +9,25 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.xfail(reason="Phase 3: not yet implemented", strict=True)
 def test_nf1_existing_youtube_behavior_unchanged():
     """NF1: No changes to existing YouTube-only behavior.
 
     All pre-existing unit and integration tests continue to pass,
     confirming no regression in YouTube-only functionality.
     """
-    from youtube_updater.core.restream_client import RestreamClient
-    pytest.fail("Restream integration not yet implemented -- NF1 verification deferred")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest",
+         "tests/unit/test_cli.py",
+         "tests/unit/test_core.py",
+         "tests/unit/test_youtube_client.py",
+         "tests/integration/test_integration.py",
+         "tests/integration/test_workflow.py",
+         "-v", "--tb=short", "-q"],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parent.parent.parent),
+    )
+    assert result.returncode == 0, f"Existing tests failed:\n{result.stdout}\n{result.stderr}"
 
 
 def test_nf2_restream_creds_0o600(temp_config_dir):
