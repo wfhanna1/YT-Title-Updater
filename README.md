@@ -29,7 +29,7 @@ A command-line tool that automatically updates your live stream title when you g
 If you prefer to run from source instead of building a standalone binary:
 
 ```bash
-git clone https://github.com/wfhanna1/YT-Title-Updater.git
+git clone https://github.com/wfhanna1/Live-Stream-Title-Updater.git
 cd YT-Title-Updater
 pip install -r requirements.txt
 python3 -m youtube_updater --help
@@ -60,7 +60,7 @@ Open **Command Prompt** or **PowerShell**:
 
 ```bat
 :: Clone the repo
-git clone https://github.com/wfhanna1/YT-Title-Updater.git
+git clone https://github.com/wfhanna1/Live-Stream-Title-Updater.git
 cd YT-Title-Updater
 
 :: Create a virtual environment (recommended)
@@ -86,7 +86,7 @@ Open **Terminal**:
 
 ```bash
 # Clone the repo
-git clone https://github.com/wfhanna1/YT-Title-Updater.git
+git clone https://github.com/wfhanna1/Live-Stream-Title-Updater.git
 cd YT-Title-Updater
 
 # Create a virtual environment (recommended)
