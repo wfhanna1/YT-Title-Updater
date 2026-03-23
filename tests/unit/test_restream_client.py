@@ -52,22 +52,82 @@ class TestGetStreamInfo:
 
 
 class TestUpdateStreamTitle:
-    def test_update_stream_title_success(self, client):
-        """Updates all channels via PATCH /user/channel/{id}."""
+    def test_update_stream_title_uses_channel_meta_endpoint(self, client):
+        """PATCHes /user/channel-meta/{id} (not /user/channel/{id})."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT", "enabled": True, "streamingPlatformId": 5},
+        ]
+        mock_patch_resp = MagicMock(status_code=200, text="{}")
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_patch_resp) as mock_patch:
+                client.update_stream_title("New Title")
+        mock_patch.assert_called_once()
+        url = mock_patch.call_args[0][0]
+        assert "/user/channel-meta/1" in url
+
+    def test_update_stream_title_sends_title_in_body(self, client):
+        """Sends only the title field in the PATCH body."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT", "enabled": True},
+        ]
+        mock_patch_resp = MagicMock(status_code=200, text="{}")
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_patch_resp) as mock_patch:
+                client.update_stream_title("My Stream Title")
+        assert mock_patch.call_args[1]["json"] == {"title": "My Stream Title"}
+
+    def test_update_stream_title_multiple_enabled_channels(self, client):
+        """PATCHes all enabled channels."""
         mock_get_resp = MagicMock()
         mock_get_resp.status_code = 200
         mock_get_resp.json.return_value = [
             {"id": 1, "displayName": "YT", "enabled": True},
             {"id": 2, "displayName": "FB", "enabled": True},
         ]
-        mock_patch_resp = MagicMock()
-        mock_patch_resp.status_code = 200
+        mock_patch_resp = MagicMock(status_code=200, text="{}")
 
         with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
             with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_patch_resp) as mock_patch:
                 client.update_stream_title("New Title")
-        # Should have PATCHed both channels
         assert mock_patch.call_count == 2
+
+    def test_update_stream_title_skips_disabled_channels(self, client):
+        """Only PATCHes enabled channels, skips disabled ones."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT Main", "enabled": True},
+            {"id": 2, "displayName": "YT Secondary", "enabled": False},
+            {"id": 3, "displayName": "FB", "enabled": True},
+        ]
+        mock_patch_resp = MagicMock(status_code=200, text="{}")
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with patch("youtube_updater.core.restream_client.requests.patch", return_value=mock_patch_resp) as mock_patch:
+                client.update_stream_title("New Title")
+        assert mock_patch.call_count == 2
+        patched_urls = [call[0][0] for call in mock_patch.call_args_list]
+        assert any("/channel-meta/1" in u for u in patched_urls)
+        assert any("/channel-meta/3" in u for u in patched_urls)
+        assert not any("/channel-meta/2" in u for u in patched_urls)
+
+    def test_update_stream_title_all_disabled_raises(self, client):
+        """Raises RestreamAPIError when all channels are disabled."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = [
+            {"id": 1, "displayName": "YT", "enabled": False},
+        ]
+
+        with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):
+            with pytest.raises(RestreamAPIError, match="No enabled channels"):
+                client.update_stream_title("New Title")
 
     def test_update_stream_title_all_fail(self, client):
         """Raises RestreamAPIError when all channel updates fail."""
@@ -103,7 +163,7 @@ class TestUpdateStreamTitle:
             {"id": 1, "displayName": "YT", "enabled": True},
             {"id": 2, "displayName": "FB", "enabled": True},
         ]
-        success_resp = MagicMock(status_code=200)
+        success_resp = MagicMock(status_code=200, text="{}")
         fail_resp = MagicMock(status_code=500, text="error")
 
         with patch("youtube_updater.core.restream_client.requests.get", return_value=mock_get_resp):

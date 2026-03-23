@@ -1,5 +1,6 @@
 """Restream API client for managing stream titles."""
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -8,6 +9,8 @@ from ..exceptions.custom_exceptions import RestreamAPIError
 
 API_BASE = "https://api.restream.io/v2"
 REQUEST_TIMEOUT = 30  # seconds
+
+logger = logging.getLogger("youtube_updater")
 
 
 class RestreamClient:
@@ -73,9 +76,10 @@ class RestreamClient:
         return resp.json()
 
     def update_stream_title(self, title: str) -> None:
-        """Update the stream title across all connected channels.
+        """Update the stream title across all enabled channels.
 
-        Iterates over all channels and PATCHes each one with the new title.
+        Uses the /user/channel-meta/{id} endpoint which controls the
+        broadcast title on each platform. Only patches enabled channels.
 
         Args:
             title: New stream title
@@ -87,25 +91,46 @@ class RestreamClient:
         if not channels:
             raise RestreamAPIError("No channels found on Restream account.")
 
+        enabled_channels = [ch for ch in channels if ch.get("enabled")]
+        if not enabled_channels:
+            raise RestreamAPIError("No enabled channels found on Restream account.")
+
+        logger.info(
+            "Found %d channel(s) (%d enabled)", len(channels), len(enabled_channels)
+        )
+
         errors = []
         updated = 0
-        for ch in channels:
-            channel_id = ch.get("id")
+        for ch in enabled_channels:
+            channel_id = ch["id"]
             name = ch.get("displayName", "unknown")
-            if not channel_id:
-                continue
+            platform_id = ch.get("streamingPlatformId", "?")
+
+            logger.info(
+                "PATCHing channel-meta %s (id=%s, platform=%s)",
+                name, channel_id, platform_id,
+            )
+
             resp = requests.patch(
-                f"{API_BASE}/user/channel/{channel_id}",
-                json={"active": True, "title": title},
+                f"{API_BASE}/user/channel-meta/{channel_id}",
+                json={"title": title},
                 headers=self._headers,
                 timeout=REQUEST_TIMEOUT,
             )
+
+            logger.info(
+                "Channel %s response: status=%d, body=%s",
+                name, resp.status_code, resp.text[:500],
+            )
+
             if resp.status_code in (200, 204):
                 updated += 1
             else:
-                errors.append(f"{name}: {resp.status_code} {resp.text[:100]}")
+                errors.append(f"{name}: {resp.status_code} {resp.text[:200]}")
 
         if updated == 0:
             raise RestreamAPIError(
                 f"Failed to update any channels. Errors: {'; '.join(errors)}"
             )
+
+        logger.info("Updated %d/%d enabled channel(s)", updated, len(enabled_channels))
