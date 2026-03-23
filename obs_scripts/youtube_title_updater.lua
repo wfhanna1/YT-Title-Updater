@@ -97,7 +97,7 @@ end
 
 function script_description()
     return [[
-<h3>YouTube Title Updater</h3>
+<h3>Live Stream Title Updater</h3>
 <p>Automatically updates your live stream title when you go live.<br>
 Uses the <b>yt-title-updater</b> binary and your pre-configured title list.</p>
 <p><b>Mode:</b> YouTube (default) updates via YouTube Data API.<br>
@@ -165,9 +165,9 @@ end
 function script_load(settings)
     script_update(settings)
     obs.obs_frontend_add_event_callback(on_event)
-    obs.script_log(obs.LOG_INFO, "YouTube Title Updater script loaded")
+    obs.script_log(obs.LOG_INFO, "Live Stream Title Updater script loaded")
 end
 
 function script_unload()
-    obs.script_log(obs.LOG_INFO, "YouTube Title Updater script unloaded")
+    obs.script_log(obs.LOG_INFO, "Live Stream Title Updater script unloaded")
 end

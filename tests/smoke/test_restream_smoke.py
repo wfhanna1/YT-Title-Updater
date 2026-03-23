@@ -39,7 +39,7 @@ class TestRestreamImports:
             text=True,
         )
         assert result.returncode == 0
-        assert "YouTube Title Updater" in result.stdout
+        assert "Title Updater" in result.stdout
 
 
 class TestRestreamCLICommands:

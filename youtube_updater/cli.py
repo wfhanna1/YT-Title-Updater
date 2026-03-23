@@ -504,7 +504,7 @@ class YouTubeUpdaterCLI:
 def main():
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
-        description="YouTube Title Updater CLI",
+        description="Live Stream Title Updater CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 

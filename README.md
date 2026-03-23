@@ -1,6 +1,6 @@
-# YouTube Live Title Updater
+# Live Stream Title Updater
 
-A command-line tool that automatically updates your live stream title when you go live in OBS. Supports both YouTube (via YouTube Data API v3) and Restream (via Restream API, updating all connected platforms at once). Titles are read from a plain text file, rotated after each use, and archived so you never repeat one by accident.
+A command-line tool that automatically updates your live stream title when you go live in OBS. Supports YouTube (via YouTube Data API v3) and Restream (updating all connected platforms -- YouTube, Facebook, Instagram, etc. -- at once via the Restream API). Titles are read from a plain text file, rotated after each use, and archived so you never repeat one by accident.
 
 ---
 
