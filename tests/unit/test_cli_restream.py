@@ -113,6 +113,47 @@ class TestUpdateModeRouting:
         assert result == 0
         assert call_count[0] == 2
 
+    def test_update_mode_restream_dry_run(self, cli_with_mock_core, capsys):
+        """--dry-run authenticates and gets title but does not PATCH or archive."""
+        cli, mock_core = cli_with_mock_core
+        mock_client = MagicMock()
+        mock_core.restream_client = mock_client
+        mock_core.title_manager.peek_next_title.return_value = "Dry Run Title"
+
+        args = argparse.Namespace(
+            command="update", mode="restream", wait=False, wait_timeout=90,
+            dry_run=True,
+        )
+        result = cli.run(args)
+
+        assert result == 0
+        # Should NOT have called update_title_restream
+        mock_core.update_title_restream.assert_not_called()
+        # Should print what it would do
+        captured = capsys.readouterr()
+        assert "Dry Run Title" in captured.out
+        assert "dry run" in captured.out.lower()
+
+    def test_update_mode_restream_dry_run_no_titles_uses_default(self, cli_with_mock_core, capsys):
+        """--dry-run with empty titles.txt shows the default generated title."""
+        cli, mock_core = cli_with_mock_core
+        mock_client = MagicMock()
+        mock_core.restream_client = mock_client
+        mock_core.title_manager.peek_next_title.return_value = None
+        mock_core.title_manager.get_next_title.return_value = "Sunday, March 22, 2026 - Divine Liturgy"
+
+        args = argparse.Namespace(
+            command="update", mode="restream", wait=False, wait_timeout=90,
+            dry_run=True,
+        )
+        result = cli.run(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Divine Liturgy" in captured.out
+        # Still should not have called the actual update
+        mock_core.update_title_restream.assert_not_called()
+
     def test_update_mode_restream_no_creds(self, cli_with_mock_core, capsys):
         cli, mock_core = cli_with_mock_core
         mock_core.config.ensure_restream_token.return_value = False

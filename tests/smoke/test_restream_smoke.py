@@ -91,3 +91,12 @@ class TestRestreamCLICommands:
         )
         assert result.returncode == 1
         assert "restream-auth" in result.stderr
+
+    def test_update_help_shows_dry_run_flag(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "youtube_updater", "update", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "--dry-run" in result.stdout

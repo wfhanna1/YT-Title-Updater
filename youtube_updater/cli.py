@@ -39,7 +39,10 @@ class YouTubeUpdaterCLI:
         """
         if args.command == "update":
             mode = getattr(args, "mode", "youtube")
+            dry_run = getattr(args, "dry_run", False)
             if mode == "restream":
+                if dry_run:
+                    return self._handle_update_restream_dry_run()
                 return self._handle_update_restream(
                     wait=args.wait, wait_timeout=args.wait_timeout
                 )
@@ -126,6 +129,42 @@ class YouTubeUpdaterCLI:
                     f" ({elapsed}/{wait_timeout}s elapsed)"
                 )
             time.sleep(_WAIT_POLL_INTERVAL)
+
+    def _handle_update_restream_dry_run(self) -> int:
+        """Handle update --mode restream --dry-run.
+
+        Authenticates and resolves the next title, but does not PATCH
+        or archive. Prints what it would do.
+
+        Returns:
+            int: 0 on success, 1 on failure
+        """
+        if not self.core.config.ensure_restream_token():
+            print(
+                "Error: No Restream credentials found. "
+                "Run `restream-auth` to authenticate.",
+                file=sys.stderr,
+            )
+            return 1
+
+        try:
+            self._ensure_restream_client()
+        except AuthenticationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        # Resolve the title that would be used
+        next_title = self.core.title_manager.peek_next_title()
+        if next_title is None:
+            next_title = self.core.title_manager.get_next_title()
+            source = "default generator"
+        else:
+            source = "titles.txt"
+
+        print(f"[DRY RUN] Would update Restream title to: {next_title}")
+        print(f"[DRY RUN] Title source: {source}")
+        print("[DRY RUN] No changes made.")
+        return 0
 
     def _handle_update_restream(self, wait: bool = False, wait_timeout: int = 90) -> int:
         """Handle the update command in Restream mode.
@@ -362,6 +401,13 @@ def main():
         dest="wait_timeout",
         metavar="N",
         help="Maximum seconds to wait for the stream to go live (default: 90)"
+    )
+    update_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Show what would be done without making changes (Restream mode only)"
     )
 
     # Status command
