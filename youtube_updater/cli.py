@@ -313,18 +313,21 @@ class YouTubeUpdaterCLI:
 
         token_path = self.core.config.get_restream_token_path()
 
-        # Env vars take priority, fall back to token file for client_id
+        # Env vars take priority, fall back to token file for client_id/secret
         client_id = os.environ.get("RESTREAM_CLIENT_ID", "")
         client_secret = os.environ.get("RESTREAM_CLIENT_SECRET", "")
 
-        if not client_id:
+        if not client_id or not client_secret:
             auth_tmp = RestreamAuth(client_id="", client_secret="", token_path=token_path)
             token_data = auth_tmp.load_token()
             if token_data is None:
                 raise AuthenticationError(
                     "No Restream credentials found. Run `restream-auth` to authenticate."
                 )
-            client_id = token_data.get("client_id", "")
+            if not client_id:
+                client_id = token_data.get("client_id", "")
+            if not client_secret:
+                client_secret = token_data.get("client_secret", "")
 
         auth = RestreamAuth(
             client_id=client_id,
@@ -332,17 +335,13 @@ class YouTubeUpdaterCLI:
             token_path=token_path,
         )
 
-        # Try to get a valid token. If the token is not expired, client_secret
-        # is not needed. If it IS expired and client_secret is empty, the
-        # refresh will fail with a clear error.
         try:
             access_token = auth.get_valid_token()
         except AuthenticationError:
             if not client_secret:
                 raise AuthenticationError(
-                    "Restream token expired and RESTREAM_CLIENT_SECRET environment variable "
-                    "is not set (required for token refresh). Set it and retry, or run "
-                    "`restream-auth` to re-authenticate."
+                    "Restream token expired and no client secret available. "
+                    "Run `restream-auth` to re-authenticate."
                 )
             raise
         self.core.restream_client = RestreamClient(access_token)

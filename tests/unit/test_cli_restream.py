@@ -201,14 +201,14 @@ class TestEnvVarSupport:
         assert result == 0
 
     def test_missing_client_secret_with_expired_token_errors(self, cli_with_mock_core, capsys, monkeypatch):
-        """Missing RESTREAM_CLIENT_SECRET with expired token produces clear error."""
+        """Missing client_secret everywhere with expired token produces clear error."""
         import json, time, os
         cli, mock_core = cli_with_mock_core
 
         monkeypatch.delenv("RESTREAM_CLIENT_SECRET", raising=False)
         monkeypatch.delenv("RESTREAM_CLIENT_ID", raising=False)
 
-        # Write an EXPIRED token -- refresh will need the secret
+        # Write an EXPIRED token WITHOUT client_secret -- refresh impossible
         token_path = mock_core.config.get_restream_token_path()
         os.makedirs(os.path.dirname(token_path), exist_ok=True)
         with open(token_path, "w") as f:
@@ -228,7 +228,7 @@ class TestEnvVarSupport:
         result = cli.run(args)
         assert result == 1
         captured = capsys.readouterr()
-        assert "RESTREAM_CLIENT_SECRET" in captured.err
+        assert "restream-auth" in captured.err
 
     def test_missing_client_secret_with_valid_token_succeeds(self, cli_with_mock_core, monkeypatch):
         """Valid (non-expired) token works without RESTREAM_CLIENT_SECRET."""

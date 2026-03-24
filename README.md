@@ -218,7 +218,7 @@ $env:RESTREAM_CLIENT_ID = "your-client-id"
 $env:RESTREAM_CLIENT_SECRET = "your-client-secret"
 ```
 
-These are required every time you run the tool in Restream mode. The client secret is not stored on disk for security.
+These are needed for the initial `restream-auth` setup. After that, the client ID and secret are saved in `restream_token.json` (with owner-only permissions) so the tool can refresh tokens automatically without env vars.
 
 #### 3. Authenticate with Restream
 
@@ -341,10 +341,7 @@ in the background. OBS is not blocked. The tool polls every 10 seconds until the
 
 ### Restream mode in OBS
 
-For Restream mode, the `RESTREAM_CLIENT_ID` and `RESTREAM_CLIENT_SECRET` environment variables must be set in the environment where OBS runs:
-
-- **macOS**: Add them to `~/.zshrc` or `~/.bash_profile`, then restart OBS.
-- **Windows**: Set them as system environment variables via Settings > System > Environment Variables, then restart OBS.
+For Restream mode, credentials are stored in `restream_token.json` after running `restream-auth`, so no environment variables are needed in OBS. Just run `restream-auth` once from any terminal, and OBS will be able to refresh tokens automatically.
 
 ---
 
@@ -352,8 +349,8 @@ For Restream mode, the `RESTREAM_CLIENT_ID` and `RESTREAM_CLIENT_SECRET` environ
 
 | Variable | Required for | Description |
 |---|---|---|
-| `RESTREAM_CLIENT_ID` | Restream mode | Restream OAuth client ID |
-| `RESTREAM_CLIENT_SECRET` | Restream mode | Restream OAuth client secret (not stored on disk) |
+| `RESTREAM_CLIENT_ID` | Restream initial setup | Restream OAuth client ID |
+| `RESTREAM_CLIENT_SECRET` | Restream initial setup | Restream OAuth client secret (saved to token file after `restream-auth`) |
 | `ACS_CONNECTION_STRING` | Email notifications | Azure Communication Services connection string |
 | `ACS_SENDER` | Email notifications | Sender email address |
 | `ACS_RECIPIENTS` | Email notifications | Recipient addresses (semicolon-separated) |
@@ -391,18 +388,15 @@ YouTube's API takes 30-60 seconds to report a new broadcast as active. Use `--wa
 **Title is not updating even though the stream is live**
 Run `yt-title-updater status` to check whether the YouTube client is initialized. If it prints `not initialized`, `client_secrets.json` is missing or `token.json` is expired -- re-run `yt-title-updater auth`.
 
-**Restream: "RESTREAM_CLIENT_SECRET environment variable is required"**
-The client secret is not stored on disk. Set `RESTREAM_CLIENT_SECRET` in your environment before running any Restream commands.
-
 **Restream: "No Restream credentials found"**
-Run `yt-title-updater restream-auth` to complete the OAuth flow. Make sure `RESTREAM_CLIENT_ID` and `RESTREAM_CLIENT_SECRET` are set.
+Run `yt-title-updater restream-auth` to complete the OAuth flow. Set `RESTREAM_CLIENT_ID` and `RESTREAM_CLIENT_SECRET` env vars (or enter them when prompted), then the credentials are saved to the token file for future use.
 
 **OBS starts streaming but the title does not change**
 Check the log file `yt-title-updater.log` in the same directory as the binary. It captures all output from the title update process. Common causes:
 - Binary path not set in the OBS script settings.
 - Expired or missing credentials -- re-run `yt-title-updater auth` or `restream-auth`.
 - `titles.txt` is empty -- add at least one title (or let the default generator create one).
-- For Restream mode: `RESTREAM_CLIENT_SECRET` not set in the OBS environment.
+- For Restream mode: run `restream-auth` again if the token file is missing or corrupt.
 
 **Email: test email goes to spam**
 The default Azure managed domain is not trusted by most mail providers. To fix this, configure a custom verified domain in your Azure Communication Services resource.

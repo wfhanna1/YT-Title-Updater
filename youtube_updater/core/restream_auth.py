@@ -237,6 +237,7 @@ class RestreamAuth:
                 "access_token": token_response["access_token"],
                 "refresh_token": token_response.get("refresh_token", ""),
                 "client_id": self.client_id,
+                "client_secret": self.client_secret,
                 "expires_at": time.time() + token_response.get("expires_in", 3600),
             }
         except KeyError as e:

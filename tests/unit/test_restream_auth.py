@@ -140,11 +140,11 @@ class TestErrorHandling:
         with pytest.raises(AuthenticationError, match="access_token"):
             auth._build_token_data({"refresh_token": "rt", "expires_in": 3600})
 
-    def test_saved_token_does_not_contain_client_secret(self, auth, token_path):
-        """Token file must not contain client_secret."""
+    def test_saved_token_contains_client_secret(self, auth, token_path):
+        """Token file must contain client_secret for later refresh."""
         fake_token = {"access_token": "at", "refresh_token": "rt", "expires_in": 3600}
         with patch.object(auth, "_run_oauth_flow", return_value=fake_token):
             auth.authenticate()
         with open(token_path) as f:
             saved = json.load(f)
-        assert "client_secret" not in saved
+        assert saved["client_secret"] == "test_csec"

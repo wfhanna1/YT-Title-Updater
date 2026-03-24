@@ -30,7 +30,7 @@ def _run_cli(*args, env_extra=None, config_dir=None):
     return subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=30)
 
 
-def _write_restream_token(config_dir, expired=False):
+def _write_restream_token(config_dir, expired=False, include_secret=True):
     """Write a fake restream_token.json to the config dir."""
     token = {
         "access_token": "fake_access_token",
@@ -38,6 +38,8 @@ def _write_restream_token(config_dir, expired=False):
         "client_id": "fake_client_id",
         "expires_at": time.time() + (-100 if expired else 3600),
     }
+    if include_secret:
+        token["client_secret"] = "fake_client_secret"
     token_path = config_dir / "restream_token.json"
     token_path.write_text(json.dumps(token))
     return token_path
@@ -58,12 +60,12 @@ class TestRestreamStatusE2E:
         # Should NOT fail with "RESTREAM_CLIENT_SECRET" error
         assert "RESTREAM_CLIENT_SECRET" not in r.stderr
 
-    def test_expired_token_no_secret_shows_secret_error(self, tmp_path):
-        """With expired token and no secret, should say secret is needed."""
-        _write_restream_token(tmp_path, expired=True)
+    def test_expired_token_no_secret_shows_reauth_error(self, tmp_path):
+        """With expired token and no secret anywhere, should say to re-auth."""
+        _write_restream_token(tmp_path, expired=True, include_secret=False)
         r = _run_cli("restream-status", config_dir=tmp_path)
         assert r.returncode == 1
-        assert "RESTREAM_CLIENT_SECRET" in r.stderr
+        assert "restream-auth" in r.stderr
 
 
 class TestUpdateRestreamE2E:
