@@ -26,6 +26,7 @@ a = Analysis(
         'google.oauth2.credentials',
         'platformdirs',
         'tzdata',
+        'charset_normalizer',
         'urllib3',
         'zoneinfo',
     ],
